@@ -38,10 +38,10 @@ const indexHtml = `<!doctype html>
   body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
     background:#f6f2e7; background-image:radial-gradient(circle at 1px 1px,rgba(22,19,15,.05) 1px,transparent 0);
     background-size:15px 15px; color:#16130f; padding:40px 20px;
-    font-family:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace; line-height:1.6; }
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; line-height:1.6; }
   .card { width:100%; max-width:620px; }
   .eyebrow { font-size:11px; letter-spacing:.3em; text-transform:uppercase; color:#8f8676; }
-  h1 { font:900 clamp(34px,7vw,52px)/1 Georgia,"Hoefler Text",serif; letter-spacing:-.02em; margin:.2em 0 .1em; }
+  h1 { font-weight:800; font-size:clamp(34px,7vw,52px); line-height:1; letter-spacing:-.03em; margin:.2em 0 .1em; }
   .cmyk { display:flex; height:6px; width:118px; margin:16px 0 22px; }
   .cmyk i { flex:1; }
   p { font-size:14.5px; }

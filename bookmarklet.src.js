@@ -12,10 +12,11 @@
  *   3. lists every billing cycle via /activities,
  *   4. fetches each /billing_cycle/{id},
  *   5. buckets daily_usage into true calendar months/years,
- *   6. opens a report window with an annual + monthly ASCII histogram and
- *      buttons to copy / download JSON + CSV.
+ *   6. renders an in-page Shadow-DOM modal (annual + monthly charts) with
+ *      buttons to copy the ASCII report / download JSON + CSV.
  *
  * Build the clickable bookmarklet:  node build-bookmarklet.mjs
+ * Maintenance notes & fragile HP dependencies:  see AGENTS.md
  */
 (async function () {
   "use strict";
@@ -28,7 +29,7 @@
   const box = document.createElement("div");
   box.style.cssText =
     "position:fixed;top:16px;right:16px;z-index:2147483647;background:#111;color:#0f0;" +
-    "font:13px/1.5 ui-monospace,Menlo,monospace;padding:10px 14px;border-radius:8px;" +
+    "font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:10px 14px;border-radius:8px;" +
     "box-shadow:0 4px 20px rgba(0,0,0,.4);max-width:320px";
   document.body.appendChild(box);
   const say = (m) => { box.textContent = "Instant Ink: " + m; };
@@ -269,10 +270,9 @@
     document.documentElement.appendChild(host);
 
     const css = `
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 :host{all:initial}
 *{margin:0;box-sizing:border-box}
-.backdrop{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:flex-start;justify-content:center;padding:5vh 18px;overflow:auto;background:rgba(18,16,12,.55);-webkit-backdrop-filter:blur(7px) saturate(115%);backdrop-filter:blur(7px) saturate(115%);font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;color:#16130f;animation:fade .3s ease both}
+.backdrop{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:flex-start;justify-content:center;padding:5vh 18px;overflow:auto;background:rgba(18,16,12,.55);-webkit-backdrop-filter:blur(7px) saturate(115%);backdrop-filter:blur(7px) saturate(115%);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#16130f;animation:fade .3s ease both}
 .dialog{position:relative;width:min(920px,100%);background:#f6f2e7;background-image:radial-gradient(circle at 1px 1px,rgba(22,19,15,.05) 1px,transparent 0);background-size:15px 15px;border:1px solid rgba(22,19,15,.14);border-radius:4px;box-shadow:0 34px 90px -22px rgba(18,16,12,.55),inset 0 1px 0 rgba(255,255,255,.7);animation:rise .42s cubic-bezier(.2,.85,.2,1) both}
 .scroll{padding:42px clamp(22px,5vw,58px) 30px}
 .reg{position:absolute;width:17px;height:17px;opacity:.45;pointer-events:none}
@@ -285,17 +285,17 @@
 .x:focus,.tools button:focus{outline:none}
 .x:focus-visible,.tools button:focus-visible{outline:2px solid #0098d4;outline-offset:2px}
 .eyebrow{font-size:10.5px;letter-spacing:.3em;text-transform:uppercase;color:#8f8676;font-weight:500}
-h1{font-family:"Fraunces","Hoefler Text","Iowan Old Style",Georgia,serif;font-optical-sizing:auto;font-weight:900;font-size:clamp(44px,9vw,82px);line-height:.9;letter-spacing:-.025em;margin:.16em 0 .34em}
+h1{font-weight:800;font-size:clamp(44px,9vw,82px);line-height:.9;letter-spacing:-.03em;margin:.16em 0 .34em}
 .meta{font-size:12px;color:#6e675a;letter-spacing:.02em}
 .hero{display:flex;align-items:baseline;gap:14px;margin:24px 0 18px}
-.hnum{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(40px,7vw,62px);color:#e5007e;line-height:1}
+.hnum{font-weight:800;font-size:clamp(40px,7vw,62px);color:#e5007e;line-height:1;letter-spacing:-.02em}
 .hlab{font-size:11px;text-transform:uppercase;letter-spacing:.22em;color:#6e675a}
 .cmyk{display:flex;height:6px;width:118px;margin-bottom:24px;border-radius:1px;overflow:hidden}
 .cmyk i{flex:1}
 .tools{display:flex;flex-wrap:wrap;gap:10px}
 .tools button{font-family:inherit;font-size:11.5px;letter-spacing:.05em;padding:9px 16px;cursor:pointer;background:transparent;color:#16130f;border:1.5px solid #16130f;border-radius:2px;transition:.18s}
 .tools button:hover{background:#16130f;color:#f6f2e7}
-.sec{font-family:"Fraunces",serif;font-weight:600;font-size:12px;letter-spacing:.24em;text-transform:uppercase;margin:38px 0 18px;padding-bottom:9px;border-bottom:1px solid rgba(22,19,15,.16)}
+.sec{font-weight:700;font-size:12px;letter-spacing:.24em;text-transform:uppercase;margin:38px 0 18px;padding-bottom:9px;border-bottom:1px solid rgba(22,19,15,.16)}
 .annual{display:flex;flex-direction:column;gap:13px}
 .arow{display:grid;grid-template-columns:52px 1fr auto;align-items:center;gap:15px}
 .ayr{font-weight:700;font-size:14px}
@@ -304,7 +304,7 @@ h1{font-family:"Fraunces","Hoefler Text","Iowan Old Style",Georgia,serif;font-op
 .aval{font-weight:700;font-size:13px;min-width:50px;text-align:right}
 .monthly{display:flex;flex-direction:column;gap:28px}
 .yhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
-.yname{font-family:"Fraunces",serif;font-weight:600;font-size:23px}
+.yname{font-weight:700;font-size:23px}
 .ytot{font-size:11.5px;color:#6e675a;letter-spacing:.04em}
 .months{display:grid;grid-template-columns:repeat(12,1fr);gap:6px}
 .col{display:flex;flex-direction:column;align-items:center;gap:5px}
