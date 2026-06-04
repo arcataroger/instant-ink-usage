@@ -1,16 +1,6 @@
 # Dependencies
 node_modules/
 
-# HP Smart HAR exports — these can contain your bearer token AND (from a login
-# capture) your plaintext password. NEVER commit them.
-*.har
-
-# Cached per-cycle responses + generated reports (personal usage data)
-cache/
-usage-summary.json
-instantink-usage.json
-instantink-usage.csv
-
 # OS / editor cruft
 .DS_Store
 *.log

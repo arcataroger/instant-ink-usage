@@ -1,51 +1,59 @@
 # Instant Ink Usage
 
-Collect your **full HP Instant Ink printing history** and view it as an annual
-summary + per-year monthly breakdown of pages printed — with bar charts.
-
-Two ways to use it:
-
-- **Bookmarklet** (recommended) — runs in your browser on the HP dashboard,
-  using your existing login. Shows a polished in-page report.
-- **Node CLI** — for HAR-based / offline use or scripting.
-
-![Screenshot of the usage report modal](docs/screenshot.png)
+See your **entire HP Instant Ink printing history** as an annual + monthly
+pages-printed report — from one browser bookmarklet. No install, no account, no
+server; it runs in your browser using the login you already have.
 
 ---
 
-## Why a bookmarklet?
+## 🚀 Install — drag it to your bookmarks bar
 
-HP sign-in is protected by [Arkose Labs](https://www.arkoselabs.com/) bot
-detection, so there's no clean way to log in from a script. Instead, you log in
-normally in your browser and then run a bookmarklet **on the dashboard page**.
-It executes in that page's origin with your live session, so it looks like the
-dashboard's own traffic — and **no credentials are ever entered, stored, or
-transmitted anywhere by this tool**. All data stays in your browser; the only
-network calls are to HP's own dashboard API.
+1. Open **[`build/install.html`](build/install.html)** in your browser
+   (download the repo and double-click it, or use the GitHub Pages link if
+   enabled — see [below](#one-click-hosted-install-optional)).
+2. **Drag the “📊 Instant Ink Usage” button onto your bookmarks bar.** Done.
 
-## Install the bookmarklet
+<sup>Prefer to do it by hand? Make a new bookmark and paste the contents of
+**[`build/bookmarklet.txt`](build/bookmarklet.txt)** as the URL.</sup>
 
-**Option A — drag to install (easiest):** open [`build/install.html`](build/install.html)
-in your browser and drag the **📊 Instant Ink Usage** button to your bookmarks bar.
+> ℹ️ A draggable bookmarklet can't live directly in this README: GitHub strips
+> `javascript:` links when it renders Markdown. That's why the drag button is in
+> `install.html` — which is just this README's install step as a real, working
+> page.
 
-**Option B — paste:** create a new bookmark and paste the entire contents of
-[`build/bookmarklet.txt`](build/bookmarklet.txt) as its URL.
+![Screenshot of the usage report](docs/screenshot.png)
 
-## Run it
+---
 
-1. Log in to HP Smart and navigate to **HP Instant Ink → Print and Payment
-   History** (`portal.hpsmart.com/.../print_plans/account_history`).
+## ▶️ Use it
+
+1. Log in to HP Smart and go to **HP Instant Ink → Print and Payment History**
+   (`portal.hpsmart.com/.../print_plans/account_history`).
 2. Click the **Instant Ink Usage** bookmark.
-3. A status chip shows progress while it fetches every billing cycle, then a
+3. A small status chip shows progress while it reads every billing cycle, then a
    report opens with:
-   - **Annual totals** (CMYK bar chart)
-   - **Monthly breakdown** per year (12-column small-multiples; each year's peak
-     month highlighted)
-   - **Copy report** (plain-text ASCII version), **Download JSON**, **Download CSV**
+   - **Annual totals** — bar chart of pages printed per year
+   - **Monthly breakdown** — 12-column chart per year, each year's peak month
+     highlighted
+   - **Copy report** (plain-text version), **Download JSON**, **Download CSV**
 
 Press <kbd>Esc</kbd>, click the backdrop, or hit ✕ to close.
 
-## How it works
+## 🔒 Why a bookmarklet (and is it safe?)
+
+HP sign-in is protected by [Arkose Labs](https://www.arkoselabs.com/) bot
+detection, so there's no clean way to log in from a script. With a bookmarklet
+you log in normally, then run it **on the dashboard page** — it executes in that
+page's origin with your existing session, so it looks like the dashboard's own
+activity.
+
+- **No credentials are entered, stored, or transmitted by this tool.**
+- Everything runs locally in your browser. The only network calls are to HP's
+  own dashboard API — the same ones the dashboard itself makes.
+- The code is plain, readable JavaScript in
+  [`bookmarklet.src.js`](bookmarklet.src.js); read it before you trust it.
+
+## ⚙️ How it works
 
 The HP dashboard exposes an undocumented JSON API at
 `instantink.hpconnected.com/api/dashboard/v1`:
@@ -55,44 +63,19 @@ The HP dashboard exposes an undocumented JSON API at
 | `GET /subscription/{sub}/activities` | Lists account events; each billed `payment_event` links to `/billing_cycles/{id}/pdf` — the month index (cycle IDs are opaque and non-sequential). |
 | `GET /subscription/{sub}/billing_cycle/{id}` | One billing cycle, including `daily_usage` with `{x: days-since-1970, y: pages}` points. |
 
-The tool de-duplicates the cycle IDs, fetches each cycle, and buckets every
-day's pages into its **true calendar month/year** (cycles run ~25th→24th, so
-they straddle month boundaries). Summing all `daily_usage` series equals the
-reported `totals.total_pages`, i.e. real pages printed.
+The bookmarklet:
 
-To authenticate to the API, the bookmarklet gathers candidate bearer tokens
-(scanning `sessionStorage`/`localStorage` and minting one via
-`POST /api/session/v3/token`) and **probes each against the API**, using
-whichever returns `200`.
+1. Finds your subscription ID (scraped from the page).
+2. Gets a working bearer token by gathering candidates (scanning
+   `sessionStorage`/`localStorage` and minting one via
+   `POST /api/session/v3/token`) and **probing each against the API**, keeping
+   whichever returns `200`.
+3. De-duplicates the cycle IDs from `/activities` and fetches each cycle.
+4. Buckets every day's pages into its **true calendar month/year** (cycles run
+   ~25th→24th, so they straddle month boundaries). Summing all `daily_usage`
+   series equals the reported `totals.total_pages` — real pages printed.
 
-## Node CLI (alternative)
-
-Requires Node 18+ (uses global `fetch`). No dependencies.
-
-```bash
-# Live pull: paste a bearer token copied from your browser's DevTools
-npm run usage -- --token "Bearer eyJ..." --sub 1234567890
-
-# Or drop a Firefox HAR export of the dashboard into the folder; the CLI
-# reads the token, subscription id, and any captured cycles from it
-npm run usage
-
-# Re-run from the on-disk cache only, no network
-npm run usage:offline
-
-# Ignore cache and re-fetch everything
-npm run usage:refresh
-```
-
-Options: `--token`, `--sub`, `--json [file]`, `--offline`, `--refresh`, `--help`.
-Completed cycles are cached under `cache/` (immutable), so re-runs are fast and
-only the current month is re-fetched.
-
-> **Note:** HP bearer tokens expire after ~1 hour, so run the CLI soon after
-> grabbing one. Chrome sanitizes `Authorization`/`Cookie` from HAR exports — use
-> a **Firefox** HAR if you go the HAR route.
-
-## Build
+## 🛠️ Build from source
 
 The bookmarklet is generated from [`bookmarklet.src.js`](bookmarklet.src.js):
 
@@ -101,17 +84,17 @@ npm run build      # writes build/bookmarklet.txt and build/install.html
 ```
 
 `build-bookmarklet.mjs` URL-encodes the source into a `javascript:` URL (no
-minification, so comments/regexes survive). [`preview.html`](preview.html)
+minification, so comments and regexes survive). [`preview.html`](preview.html)
 renders the real bookmarklet against a mocked API for visual QA.
 
-## Privacy & security
+## 🌐 One-click hosted install (optional)
 
-- **No credentials handled by this tool.** You log in yourself; the bookmarklet
-  reuses the session your browser already has.
-- All processing is local to your browser (or your machine, for the CLI).
-- **Never commit HAR files** — a dashboard HAR contains your bearer token, and a
-  login HAR contains your **plaintext password**. They're git-ignored here.
+To make the drag button available at a URL (so people can install without
+downloading anything), publish `build/install.html` with **GitHub Pages**. Note
+that a Pages site is publicly visible. Once enabled, link it at the top of this
+README, e.g. `https://arcataroger.github.io/instant-ink-usage/install.html`.
 
-## License
+## 📄 License
 
-[MIT](LICENSE)
+[CC0 1.0 Universal](LICENSE) — public domain. Do whatever you want, no
+attribution required.
