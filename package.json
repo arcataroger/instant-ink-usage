@@ -1,0 +1,39 @@
+{
+  "name": "instant-ink-usage",
+  "version": "1.0.0",
+  "description": "Collect your full HP Instant Ink printing history and view it as an annual + monthly pages-printed report — via a browser bookmarklet or a Node CLI.",
+  "type": "module",
+  "license": "MIT",
+  "author": "arcataroger",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arcataroger/instant-ink-usage.git"
+  },
+  "keywords": [
+    "hp",
+    "instant-ink",
+    "bookmarklet",
+    "usage",
+    "printing",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "instant-ink-usage": "collect-usage.mjs"
+  },
+  "files": [
+    "collect-usage.mjs",
+    "bookmarklet.src.js",
+    "build-bookmarklet.mjs",
+    "preview.html",
+    "build/"
+  ],
+  "scripts": {
+    "build": "node build-bookmarklet.mjs",
+    "usage": "node collect-usage.mjs",
+    "usage:refresh": "node collect-usage.mjs --refresh",
+    "usage:offline": "node collect-usage.mjs --offline"
+  }
+}

@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>bookmarklet preview</title>
+<body style="margin:0;height:100vh;background:#dcd7cb">
+<div style="padding:40px;font:14px system-ui">Host page (HP portal stand-in). Plan Details — Subscription ID: 1234567890</div>
+<script>
+// ---- mock the browser/network so the real bookmarklet runs end-to-end ----
+const JWT = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJwcmV2aWV3In0.sig";
+function monthOfId(id) { // map cycle id -> [year, month0] over Jan 2023 .. Jun 2026
+  const n = Number(id); const start = 2023 * 12; const idx = start + n;
+  return [Math.floor(idx / 12), idx % 12];
+}
+function serial(y, m, day) { return Math.round((Date.UTC(y, m, day) - Date.UTC(1970,0,1)) / 86400000); }
+function pagesFor(n) { // varied but deterministic
+  return [3, 41, 9, 27, 0, 15, 62, 18, 7, 33, 11, 48, 22, 5, 38, 14, 29, 8, 55, 19, 12, 44, 6, 31, 17, 26, 9, 50, 21, 13, 36, 7, 24, 10, 40, 16, 28][n % 37];
+}
+const NCYCLES = 42; // Jan 2023 .. Jun 2026
+window.fetch = async (url, opts) => {
+  const u = String(url);
+  if (u.includes("/api/session/v3/token")) return { ok:true, json: async () => ({ token: JWT }) };
+  if (u.endsWith("/activities")) {
+    const activities = [];
+    for (let n = NCYCLES - 1; n >= 0; n--)
+      activities.push({ type:"payment_event", activity:{ invoice_download_link:`/api/dashboard/v1/billing_cycles/${n}/pdf` } });
+    return { ok:true, json: async () => ({ activities }) };
+  }
+  const m = u.match(/\/billing_cycle\/(\d+)/);
+  if (m) {
+    const n = +m[1]; const [y, mo] = monthOfId(n); const total = pagesFor(n);
+    // spread pages across a few days in that calendar month
+    const regular = [
+      { x: serial(y, mo, 4),  y: Math.round(total * 0.5) },
+      { x: serial(y, mo, 14), y: Math.round(total * 0.3) },
+      { x: serial(y, mo, 24), y: total - Math.round(total * 0.5) - Math.round(total * 0.3) },
+    ];
+    return { ok:true, json: async () => ({ id:n, totals:{ total_pages: total }, daily_usage:{ regular } }) };
+  }
+  return { ok:false, status:404, json: async () => ({}) };
+};
+</script>
+<script src="bookmarklet.src.js"></script>
+</body>
