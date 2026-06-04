@@ -25,24 +25,40 @@
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const JWT_RE = /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/;
 
-  // ---- tiny status overlay -------------------------------------------------
+  // ---- status chip (centered top, styled to match the report) -------------
   const box = document.createElement("div");
   box.style.cssText =
-    "position:fixed;top:16px;right:16px;z-index:2147483647;background:#111;color:#0f0;" +
-    "font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:10px 14px;border-radius:8px;" +
-    "box-shadow:0 4px 20px rgba(0,0,0,.4);max-width:320px";
+    "position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:2147483647;" +
+    "display:flex;align-items:center;gap:11px;box-sizing:border-box;max-width:92vw;" +
+    "background:#f6f2e7;color:#16130f;border:1px solid rgba(22,19,15,.16);border-radius:999px;" +
+    "padding:11px 18px;box-shadow:0 12px 34px -10px rgba(18,16,12,.5);" +
+    "font:600 13.5px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif";
+  const dot = (c) =>
+    '<i style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + c + '"></i>';
+  box.innerHTML =
+    '<span id="iidots" style="display:inline-flex;gap:4px">' +
+    dot("#0098d4") + dot("#e5007e") + dot("#f5b500") + dot("#16130f") +
+    "</span><span id=\"iitext\"></span>";
   document.body.appendChild(box);
-  const say = (m) => { box.textContent = "Instant Ink: " + m; };
-  const fail = (m) => { box.style.color = "#f55"; box.textContent = "Instant Ink: " + m; };
-  say("starting…");
+  const dotsEl = box.querySelector("#iidots");
+  const textEl = box.querySelector("#iitext");
+  // gentle on-brand "wave" so it reads as working (Web Animations API, no CSS needed)
+  dotsEl.querySelectorAll("i").forEach((d, i) =>
+    d.animate(
+      [{ transform: "translateY(0)" }, { transform: "translateY(-4px)" }, { transform: "translateY(0)" }],
+      { duration: 900, iterations: Infinity, delay: i * 120, easing: "ease-in-out" }
+    ));
+  const say = (m) => { textEl.textContent = m; };
+  const fail = (m) => { dotsEl.style.display = "none"; box.style.color = "#b00020"; textEl.textContent = m; };
+  say("Getting ready…");
 
   try {
     // ---- 1. subscription id ------------------------------------------------
     let sub = (document.body.innerText.match(/Subscription\s*ID:?\s*(\d{6,})/i) || [])[1];
     if (!sub) sub = (location.href.match(/subscription[/=](\d{6,})/i) || [])[1];
-    if (!sub) sub = prompt("Couldn't auto-detect your Subscription ID. Enter it:") || "";
+    if (!sub) sub = prompt("We couldn't find your account number on this page. It's shown on your HP Instant Ink page as \"Subscription ID\". Please type it here:") || "";
     sub = sub.trim();
-    if (!/^\d+$/.test(sub)) throw new Error("no subscription id");
+    if (!/^\d+$/.test(sub)) throw new Error("Couldn't find your HP Instant Ink account number. Please open your Print and Payment History page and try again.");
 
     // ---- 2. obtain a working bearer token ----------------------------------
     const candidates = new Set();
@@ -68,15 +84,15 @@
       if (r.ok) deepCollectJwts(await r.json().catch(() => null), candidates);
     } catch {}
 
-    say(`probing ${candidates.size} token candidate(s)…`);
+    say("Connecting to your HP account…");
     let token = null;
     for (const t of candidates) {
       if (await probe(sub, t)) { token = t; break; }
     }
-    if (!token) throw new Error("couldn't get a working token — are you logged in on this page?");
+    if (!token) throw new Error("Couldn't connect to your HP account. Please make sure you're signed in on this page, then try again.");
 
     // ---- 3. enumerate billing cycles via /activities -----------------------
-    say("listing billing cycles…");
+    say("Finding your printing history…");
     const acts = await apiGet(`${API}/subscription/${sub}/activities`, token);
     const ids = [];
     const seen = new Set();
@@ -84,7 +100,7 @@
       const m = (a?.activity?.invoice_download_link || "").match(/\/billing_cycles\/(\d+)\//);
       if (m && !seen.has(m[1])) { seen.add(m[1]); ids.push(m[1]); }
     }
-    if (!ids.length) throw new Error("no billing cycles found in activity list");
+    if (!ids.length) throw new Error("We couldn't find any printing history on your account yet.");
 
     // ---- 4. fetch each cycle (limited concurrency) -------------------------
     const byYear = new Map();
@@ -100,11 +116,11 @@
           const c = await apiGet(`${API}/subscription/${sub}/billing_cycle/${id}`, token);
           accumulate(c, byYear, byYM, days);
         } catch (e) { /* skip a bad cycle, keep going */ }
-        say(`fetching cycles… ${++done}/${ids.length}`);
+        say(`Adding up your pages… ${++done} of ${ids.length} months`);
       }
     }
     await Promise.all(Array.from({ length: Math.min(CONC, ids.length) }, worker));
-    if (!byYear.size) throw new Error("fetched cycles but found no usage data");
+    if (!byYear.size) throw new Error("We couldn't read your usage history. Please try again in a moment.");
 
     // ---- 5/6. render report -----------------------------------------------
     days.sort();
@@ -116,12 +132,15 @@
       byYear,
       byYM,
     });
-    box.style.color = "#0f0";
-    say(`done — ${ids.length} cycles. Report opened.`);
-    setTimeout(() => box.remove(), 4000);
+    say("All done — here's your report!");
+    setTimeout(() => box.remove(), 3500);
   } catch (err) {
-    fail(err.message || String(err));
-    setTimeout(() => box.remove(), 8000);
+    const m = String((err && err.message) || err);
+    // show our friendly messages as-is; replace any raw technical error
+    fail(/^(HTTP|Failed|NetworkError|Load failed|TypeError|fetch|Unexpected)/i.test(m)
+      ? "Something went wrong while talking to HP. Please refresh the page and try again."
+      : m);
+    setTimeout(() => box.remove(), 9000);
   }
 
   // ---- helpers -------------------------------------------------------------
