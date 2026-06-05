@@ -25,6 +25,7 @@ build tooling and docs.
 | `docs/screenshot.png` | README/install-page screenshot (regenerated from `preview.html`). |
 | `docs/.nojekyll` | Stops GitHub Pages from running Jekyll on `docs/`. **Keep it.** |
 | `preview.html` | Renders the real bookmarklet against a **mocked** API for visual QA. |
+| `schema/billing-cycle.schema.json` | JSON Schema (+ sanitized example) of the `billing_cycle` API response. Reference when touching parsing/cost logic. |
 | `package.json` | Metadata + the single `npm run build` script. License: CC0-1.0. |
 
 GitHub Pages is configured to serve from `main` branch, `/docs` folder →
@@ -54,7 +55,13 @@ All of this happens client-side, in the origin of the page the user runs it on
    the form `/billing_cycles/{id}/pdf` yields a billing-cycle id. IDs are opaque
    and non-sequential, and the same cycle can appear twice, so they're de-duped.
 4. **Fetch each cycle.** `GET /api/dashboard/v1/subscription/{sub}/billing_cycle/{id}`,
-   5 in parallel.
+   5 in parallel. Full response shape is documented in
+   [`schema/billing-cycle.schema.json`](schema/billing-cycle.schema.json). Notably,
+   `totals` carries HP's own per-cycle cost accounting (base `regular_price`,
+   overage `additional_price`/`additional_pages`/`overage_blocks`, `total_price`) —
+   prefer these over recomputing from `plan` rates. Money fields are display
+   strings (`"$1.79"`, and `regular_price` is `"$1.79 Plan"`); `start_date`/
+   `end_date` have no year (derive it from the daily `x` serials).
 5. **Bucket usage by calendar month/year.** Each cycle has
    `daily_usage.{regular,rollover,overage,trial,credit_pages}`, arrays of
    `{x, y}` points where **`x` = whole days since the Unix epoch (1970-01-01 UTC)**

@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/arcataroger/instant-ink-usage/schema/billing-cycle.schema.json",
+  "title": "HP Instant Ink billing_cycle response",
+  "description": "Shape of GET https://instantink.hpconnected.com/api/dashboard/v1/subscription/{sub}/billing_cycle/{id}. Undocumented private HP API captured 2026-06; HP may change it without notice. Money fields are display STRINGS (e.g. \"$1.79\"), not numbers, and some carry a suffix (regular_price is \"$1.79 Plan\"). start_date/end_date are month+day strings with NO year (\"Jan 25\"); derive the real year from daily_usage[*].x (whole days since 1970-01-01 UTC).",
+  "type": "object",
+  "required": ["id", "plan", "daily_usage", "totals"],
+  "properties": {
+    "id": { "type": "integer", "description": "Billing-cycle id (opaque, non-sequential)." },
+    "arpb_id": { "type": ["integer", "null"] },
+    "plan": {
+      "type": "object",
+      "description": "The plan in effect for this cycle. Can differ between cycles if the user changed plans.",
+      "properties": {
+        "pages": { "type": "integer", "description": "Included (base) pages per cycle, e.g. 15." },
+        "price": { "type": "string", "description": "Base monthly price as a display string, e.g. \"$1.79\"." },
+        "overage_block_size": { "type": "integer", "description": "Pages per overage block, e.g. 10." },
+        "overage_block_price": { "type": "string", "description": "Price per overage block, e.g. \"$1.50\"." },
+        "rollover": { "type": "integer" },
+        "rollover_cap": { "type": "integer" },
+        "waiver": { "type": "integer" },
+        "is_yearly_plan": { "type": "boolean" },
+        "price_with_paper": { "type": "string" },
+        "overage_block_price_with_paper": { "type": "string" },
+        "addons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": ["string", "null"] },
+              "guid": { "type": "string" },
+              "obsolete": { "type": "boolean" },
+              "attributes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "value": {},
+                    "filters": { "type": "string" }
+                  }
+                }
+              },
+              "extra_options": { "type": "array" }
+            }
+          }
+        }
+      }
+    },
+    "daily_usage": {
+      "type": "object",
+      "description": "Per-category daily page counts. Each series is an array of {x, y} where x = whole days since 1970-01-01 UTC and y = pages that day. Summing y across ALL series for the cycle equals totals.total_pages. The 'overage' series sums to totals.additional_pages.",
+      "properties": {
+        "regular": { "$ref": "#/$defs/series" },
+        "rollover": { "$ref": "#/$defs/series" },
+        "overage": { "$ref": "#/$defs/series" },
+        "trial": { "$ref": "#/$defs/series" },
+        "credit_pages": { "$ref": "#/$defs/series" }
+      }
+    },
+    "start_date": { "type": "string", "description": "Cycle start as month+day, NO year, e.g. \"Jan 25\". For the year, use daily_usage[*].x." },
+    "end_date": { "type": "string", "description": "Cycle end as month+day, NO year, e.g. \"Feb 24\"." },
+    "created_at": { "type": "string", "description": "Human-readable timestamp, e.g. \"January 25, 2026 09:52 AM\" — does include a year." },
+    "previous_overage_total": { "type": "string", "description": "Carried-over overage from a prior cycle, display string." },
+    "is_current_cycle": { "type": "boolean" },
+    "view_as_pdf_link": { "type": "string", "description": "Relative path; contains the billing-cycle id." },
+    "download_all_invoices_pdf_link": { "type": "string", "description": "Relative path; contains the subscription id." },
+    "show_view_as_pdf_link": { "type": "boolean" },
+    "processing_invoice": { "type": "boolean" },
+    "show_detailed_print_history": { "type": "boolean" },
+    "using_free_trial_months": { "type": "boolean" },
+    "free_month_type": { "type": ["string", "null"] },
+    "raf_month_type": { "type": ["string", "null"] },
+    "had_active_instant_paper": { "type": "boolean" },
+    "care_pack": { "type": "object" },
+    "credit_note_links": { "type": "array" },
+    "totals": {
+      "type": "object",
+      "description": "HP's own per-cycle accounting. These are the authoritative cost figures — read them rather than recomputing from plan rates. base pages = regular + rollover (+ trial + credit); overage = additional_*.",
+      "properties": {
+        "regular_pages": { "type": "integer", "description": "Base pages used within the plan allowance." },
+        "regular_price": { "type": "string", "description": "Base/plan charge. NOTE the suffix: \"$1.79 Plan\". Parse currency only." },
+        "rollover_pages": { "type": "integer" },
+        "initial_rollover_pages": { "type": "integer" },
+        "rollover_price": { "type": "string", "description": "Usually \"$0.00\" — rollover pages are free." },
+        "additional_pages": { "type": "integer", "description": "Overage pages (above the allowance). Equals the summed 'overage' daily series." },
+        "overage_blocks": { "type": "integer", "description": "Number of overage blocks billed (ceil(additional_pages / overage_block_size))." },
+        "additional_price": { "type": "string", "description": "Overage charge, e.g. \"$7.50\" (= overage_blocks * plan.overage_block_price)." },
+        "initial_free_pages": { "type": "integer" },
+        "trial_pages": { "type": "integer" },
+        "credit_pages": { "type": "integer" },
+        "total_pages": { "type": "integer", "description": "regular + rollover + additional (+ trial + credit)." },
+        "price_without_previous_overage": { "type": "string" },
+        "tax_included": { "type": "boolean" },
+        "tax": { "type": "string" },
+        "gst_hst": { "type": ["string", "null"], "description": "Canada tax fields; null for US." },
+        "pst_qst": { "type": ["string", "null"] },
+        "total_price_less_tax": { "type": "string" },
+        "total_price": { "type": "string", "description": "Total charged for the cycle, e.g. \"$9.29\" (= regular + additional, plus tax)." },
+        "total_price_for_pages_printed_in_this_cycle": { "type": ["string", "null"] },
+        "total_price_with_instant_paper": { "type": ["string", "null"] },
+        "total_price_with_instant_paper_for_pages_printed_in_this_cycle": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "$defs": {
+    "series": {
+      "type": "array",
+      "description": "Daily page counts for one category.",
+      "items": {
+        "type": "object",
+        "required": ["x", "y"],
+        "properties": {
+          "x": { "type": "integer", "description": "Whole days since 1970-01-01 UTC." },
+          "y": { "type": "integer", "description": "Pages printed that day in this category." }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "id": 1000000000,
+      "plan": {
+        "pages": 15, "price": "$1.79", "overage_block_size": 10, "overage_block_price": "$1.50",
+        "rollover": 45, "rollover_cap": 45, "waiver": 700, "is_yearly_plan": false,
+        "price_with_paper": "$1.79", "overage_block_price_with_paper": "$1.50", "addons": []
+      },
+      "daily_usage": {
+        "regular": [{ "x": 20504, "y": 9 }],
+        "rollover": [{ "x": 20504, "y": 6 }],
+        "overage": [{ "x": 20504, "y": 35 }, { "x": 20505, "y": 8 }],
+        "trial": [], "credit_pages": []
+      },
+      "start_date": "Jan 25", "end_date": "Feb 24",
+      "created_at": "January 25, 2026 09:52 AM",
+      "previous_overage_total": "$0.00", "is_current_cycle": false,
+      "view_as_pdf_link": "/billing_cycles/1000000000/pdf",
+      "download_all_invoices_pdf_link": "/subscriptions/0000000000/invoices",
+      "totals": {
+        "regular_pages": 15, "regular_price": "$1.79 Plan",
+        "rollover_pages": 6, "initial_rollover_pages": 6, "rollover_price": "$0.00",
+        "additional_pages": 43, "overage_blocks": 5, "additional_price": "$7.50",
+        "initial_free_pages": 0, "trial_pages": 0, "credit_pages": 0,
+        "total_pages": 64, "price_without_previous_overage": "$9.29",
+        "tax_included": false, "tax": "$0.00", "gst_hst": null, "pst_qst": null,
+        "total_price_less_tax": "$9.29", "total_price": "$9.29"
+      }
+    }
+  ]
+}
