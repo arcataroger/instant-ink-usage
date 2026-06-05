@@ -34,7 +34,7 @@ const indexHtml = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HP Instant Ink Usage History — See Pages Printed Per Month &amp; Year (Free)</title>
-<meta name="description" content="A free, open-source bookmarklet that shows your full HP Instant Ink printing history — how many pages you've printed each month and year. Runs in your browser, never sees your password, nothing is uploaded.">
+<meta name="description" content="A free, open-source bookmarklet that shows your full HP Instant Ink history — pages printed and what you paid each year, split into base plan vs overage. Runs in your browser, never sees your password, nothing is uploaded.">
 <link rel="canonical" href="${SITE}">
 <meta property="og:type" content="website">
 <meta property="og:title" content="HP Instant Ink Usage History — Pages Printed Per Month & Year">
@@ -119,9 +119,9 @@ const indexHtml = `<!doctype html>
   <div class="eyebrow">HP Instant Ink · Usage Statement</div>
   <h1>Instant Ink Usage</h1>
   <div class="cmyk"><i style="background:#0098d4"></i><i style="background:#e5007e"></i><i style="background:#f5b500"></i><i style="background:#16130f"></i></div>
-  <p class="lead">A one-click button that shows your whole HP Instant Ink printing history —
-  how many pages you've printed each month and each year. It runs in your own browser using
-  the HP login you already have.</p>
+  <p class="lead">A one-click button that shows your whole HP Instant Ink history — how many
+  pages you've printed and what you paid each year, split into base plan vs. overage. It runs
+  in your own browser using the HP login you already have.</p>
 
   <hr>
 

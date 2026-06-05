@@ -40,8 +40,10 @@ and log in to your HP account like you normally would. This is HP's own website.
 Once you're signed in and looking at that page, click the **Instant Ink Usage**
 bookmark you just added. Your report pops up right on the page, showing:
 
-- **Pages printed each year** (with a bar chart)
-- **Pages printed each month**, year by year
+- **Pages and cost**, split into your **base plan vs. overage** — using HP's own
+  per-cycle charges
+- A **year-by-year summary** plus your **average pages and spend per year**
+- A **breakdown of every billing cycle**, oldest to newest
 - Buttons to **copy** the report or **download** it as a spreadsheet (CSV) or a
   data file (JSON)
 
@@ -60,13 +62,13 @@ plain-English version:
 - **It uses the login you already have.** You sign in to HP yourself, in the
   normal way. The tool **never sees, asks for, or stores your password** — it
   simply piggybacks on the session your browser already created.
-- **It asks HP for your history, one month at a time.** Your HP account keeps a
-  record of each monthly billing cycle. The tool politely requests each month's
-  totals — the exact same numbers HP's own dashboard shows you — and collects
-  them all, going back as far as your account goes.
-- **It does the math locally.** Because billing months don't line up neatly with
-  calendar months, it sorts each day's pages into the real calendar month and
-  year, then adds everything up to build the yearly and monthly charts.
+- **It asks HP for your history, one billing cycle at a time.** Your HP account
+  keeps a record of each monthly billing cycle. The tool politely requests each
+  cycle's pages **and charges** — the exact same numbers HP's own dashboard shows
+  you — and collects them all, going back as far as your account goes.
+- **It does the math locally.** It groups your billing cycles by year, splits
+  base vs. overage pages and cost, and works out your yearly totals and averages —
+  using HP's own per-cycle figures, so the dollars match your real bills.
 - **Nothing leaves your computer.** Your usage data isn't uploaded anywhere. The
   only thing the tool talks to is HP's own website — the same one you're already
   looking at. If you download the CSV/JSON, those files save straight to your

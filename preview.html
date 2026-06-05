@@ -8,15 +8,44 @@
 // Tell the bookmarklet to skip its portal.hpsmart.com host check (we're file://).
 window.__IIPREVIEW = true;
 const JWT = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJwcmV2aWV3In0.sig";
-function monthOfId(id) { // map cycle id -> [year, month0] over Jan 2023 .. Jun 2026
-  const n = Number(id); const start = 2023 * 12; const idx = start + n;
-  return [Math.floor(idx / 12), idx % 12];
-}
 function serial(y, m, day) { return Math.round((Date.UTC(y, m, day) - Date.UTC(1970,0,1)) / 86400000); }
 function pagesFor(n) { // varied but deterministic
   return [3, 41, 9, 27, 0, 15, 62, 18, 7, 33, 11, 48, 22, 5, 38, 14, 29, 8, 55, 19, 12, 44, 6, 31, 17, 26, 9, 50, 21, 13, 36, 7, 24, 10, 40, 16, 28][n % 37];
 }
 const NCYCLES = 42; // Jan 2023 .. Jun 2026
+const money = (n) => "$" + n.toFixed(2);
+// HP bills cycles ~25th->24th, so cycle n runs 25th of (Jan 2023 + n) to 24th of
+// the next month — which makes the Dec->Jan cycles straddle a year boundary,
+// exercising the "year = cycle end" rule.
+function cycleResponse(n) {
+  const sy = 2023 + Math.floor(n / 12), sm = n % 12;
+  const start = serial(sy, sm, 25);
+  const end = Math.round((Date.UTC(sy, sm + 1, 24) - Date.UTC(1970, 0, 1)) / 86400000);
+  const used = pagesFor(n);
+  const base = Math.min(used, 15);
+  const over = Math.max(0, used - 15);
+  const blocks = Math.ceil(over / 10);
+  const overPrice = blocks * 1.5;
+  const total = 1.79 + overPrice;
+  const mid = Math.round((start + end) / 2);
+  const totals = {
+    regular_pages: base, regular_price: "$1.79 Plan",
+    rollover_pages: 0, initial_rollover_pages: 0, rollover_price: "$0.00",
+    additional_pages: over, overage_blocks: blocks, additional_price: money(overPrice),
+    initial_free_pages: 0, trial_pages: 0, credit_pages: 0, total_pages: used,
+    price_without_previous_overage: money(total), tax_included: false, tax: "$0.00",
+    gst_hst: null, pst_qst: null, total_price_less_tax: money(total), total_price: money(total),
+  };
+  const plan = { pages: 15, price: "$1.79", overage_block_size: 10, overage_block_price: "$1.50",
+    rollover: 45, rollover_cap: 45, waiver: 700, is_yearly_plan: false,
+    price_with_paper: "$1.79", overage_block_price_with_paper: "$1.50", addons: [] };
+  const daily_usage = {
+    regular: [{ x: start, y: 0 }, { x: mid, y: base }, { x: end, y: 0 }],
+    rollover: [], overage: [{ x: start, y: 0 }, { x: mid, y: over }, { x: end, y: 0 }],
+    trial: [], credit_pages: [],
+  };
+  return { id: n, plan, daily_usage, start_date: "—", end_date: "—", totals };
+}
 window.fetch = async (url, opts) => {
   const u = String(url);
   if (u.includes("/api/session/v3/token")) return { ok:true, json: async () => ({ token: JWT }) };
@@ -28,16 +57,7 @@ window.fetch = async (url, opts) => {
     return { ok:true, json: async () => ({ activities }) };
   }
   const m = u.match(/\/billing_cycle\/(\d+)/);
-  if (m) {
-    const n = +m[1]; const [y, mo] = monthOfId(n); const total = pagesFor(n);
-    // spread pages across a few days in that calendar month
-    const regular = [
-      { x: serial(y, mo, 4),  y: Math.round(total * 0.5) },
-      { x: serial(y, mo, 14), y: Math.round(total * 0.3) },
-      { x: serial(y, mo, 24), y: total - Math.round(total * 0.5) - Math.round(total * 0.3) },
-    ];
-    return { ok:true, json: async () => ({ id:n, totals:{ total_pages: total }, daily_usage:{ regular } }) };
-  }
+  if (m) return { ok:true, json: async () => cycleResponse(+m[1]) };
   return { ok:false, status:404, json: async () => ({}) };
 };
 </script>

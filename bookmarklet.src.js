@@ -11,10 +11,11 @@
  *   2. reads your subscription id straight from that /user response (no page
  *      scraping, so it works anywhere you're signed in on portal.hpsmart.com),
  *   3. lists every billing cycle via /activities,
- *   4. fetches each /billing_cycle/{id},
- *   5. buckets daily_usage into true calendar months/years,
- *   6. renders an in-page Shadow-DOM modal (annual + monthly charts) with
- *      buttons to copy the ASCII report / download JSON + CSV.
+ *   4. fetches each /billing_cycle/{id} (pages + HP's own cost totals),
+ *   5. groups cycles by the calendar year they END in,
+ *   6. renders an in-page Shadow-DOM modal — all-time totals, annualized
+ *      averages, a per-year summary (pages + base/overage cost) and a
+ *      per-cycle breakdown — with buttons to copy ASCII / download JSON + CSV.
  *
  * Build the clickable bookmarklet:  node build-bookmarklet.mjs
  * Maintenance notes & fragile HP dependencies:  see AGENTS.md
@@ -139,9 +140,7 @@
     if (!ids.length) throw new Error("We couldn't find any printing history on your account yet.");
 
     // ---- 4. fetch each cycle (limited concurrency) -------------------------
-    const byYear = new Map();
-    const byYM = new Map();
-    const days = [];
+    const cycles = [];
     let done = 0;
     const CONC = 5;
     let cursor = 0;
@@ -150,24 +149,17 @@
         const id = ids[cursor++];
         try {
           const c = await apiGet(`${API}/subscription/${sub}/billing_cycle/${id}`, token);
-          accumulate(c, byYear, byYM, days);
+          const rec = cycleRecord(c);
+          if (rec) cycles.push(rec);
         } catch (e) { /* skip a bad cycle, keep going */ }
-        say(`Adding up your pages… ${++done} of ${ids.length} months`);
+        say(`Adding up your pages… ${++done} of ${ids.length} cycles`);
       }
     }
     await Promise.all(Array.from({ length: Math.min(CONC, ids.length) }, worker));
-    if (!byYear.size) throw new Error("We couldn't read your usage history. Please try again in a moment.");
+    if (!cycles.length) throw new Error("We couldn't read your usage history. Please try again in a moment.");
 
     // ---- 5/6. render report -----------------------------------------------
-    days.sort();
-    openReport({
-      sub,
-      cycleCount: ids.length,
-      first: days[0],
-      last: days[days.length - 1],
-      byYear,
-      byYM,
-    });
+    openReport(buildModel(sub, cycles));
     say("All done — here's your report!");
     setTimeout(() => box.remove(), 3500);
   } catch (err) {
@@ -201,79 +193,159 @@
     return r.json();
   }
 
-  function ym(x) { const d = new Date(EPOCH_MS + x * 86400000); return [d.getUTCFullYear(), d.getUTCMonth()]; }
-  function accumulate(cycle, byYear, byYM, days) {
+  // Parse an HP money string ("$1.79", "$1.79 Plan", "$1,200.00") into a number
+  // + its currency symbol. Amounts arrive as display strings, some with a
+  // trailing label, so read the leading symbol and the first numeric run.
+  function r2(n) { return Math.round(n * 100) / 100; } // hoisted: used by cycleRecord during fetch
+  function parseMoney(s) {
+    s = String(s == null ? "" : s);
+    const sym = (s.match(/^\s*([^\s\d.,+-])/) || [, ""])[1];
+    const m = s.match(/-?[\d,]*\.?\d+/);
+    const amt = m ? parseFloat(m[0].replace(/,/g, "")) : 0;
+    return { amount: isFinite(amt) ? amt : 0, symbol: sym };
+  }
+  function fmtMoney(n, sym) {
+    return (sym || "$") + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function isoDay(serial) { return new Date(EPOCH_MS + serial * 86400000).toISOString().slice(0, 10); }
+  function fmtDay(iso) { const [y, m, d] = iso.split("-"); return `${MONTHS[+m - 1]} ${+d} ${y}`; }
+  function fmtRange(startIso, endIso) {
+    const s = fmtDay(startIso), e = fmtDay(endIso);
+    // drop the (redundant) year from the start when both ends share it
+    return (startIso.slice(0, 4) === endIso.slice(0, 4) ? s.replace(/ \d+$/, "") : s) + " → " + e;
+  }
+  function median(arr) {
+    if (!arr.length) return 0;
+    const s = [...arr].sort((a, b) => a - b);
+    const mid = s.length >> 1;
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  }
+
+  // Turn one billing_cycle response into a flat record. Pages and cost come
+  // straight from HP's `totals`; the real start/end dates (the strings omit the
+  // year) come from the span of daily_usage `x` serials. See schema/.
+  function cycleRecord(cycle) {
     const du = cycle.daily_usage || {};
+    let minX = Infinity, maxX = -Infinity;
     for (const series of Object.values(du)) {
       if (!Array.isArray(series)) continue;
       for (const p of series) {
-        const pages = p && p.y || 0;
-        if (!pages) continue;
-        const [y, m] = ym(p.x);
-        byYear.set(y, (byYear.get(y) || 0) + pages);
-        const k = y + "-" + m;
-        byYM.set(k, (byYM.get(k) || 0) + pages);
-        days.push(new Date(EPOCH_MS + p.x * 86400000).toISOString().slice(0, 10));
+        if (p && typeof p.x === "number") { if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x; }
       }
     }
+    if (!isFinite(minX)) return null; // no usable data points
+    const t = cycle.totals || {};
+    const totalPages = t.total_pages || 0;
+    const overagePages = t.additional_pages || 0;
+    const base = parseMoney(t.regular_price);
+    const overage = parseMoney(t.additional_price);
+    const total = parseMoney(t.total_price);
+    const lessTax = parseMoney(t.total_price_less_tax);
+    const tax = Math.max(0, r2(total.amount - lessTax.amount));
+    return {
+      id: cycle.id,
+      startSerial: minX, endSerial: maxX,
+      start: isoDay(minX), end: isoDay(maxX),
+      year: new Date(EPOCH_MS + maxX * 86400000).getUTCFullYear(), // belongs to the year it ENDS
+      symbol: base.symbol || total.symbol || overage.symbol || "",
+      pages: { base: Math.max(0, totalPages - overagePages), overage: overagePages, total: totalPages },
+      cost: { base: base.amount, overage: overage.amount, tax, total: total.amount },
+    };
   }
 
-  function bar(value, max, width) {
-    width = width || 40;
-    if (max <= 0 || value <= 0) return "";
-    const units = (value / max) * width;
-    const whole = Math.floor(units);
-    const rem = Math.round((units - whole) * 8);
-    const parts = [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉"];
-    let s = "█".repeat(whole);
-    if (rem > 0) s += parts[rem];
-    return s || "▏";
+  // Roll the per-cycle records up into the single model every renderer consumes.
+  function buildModel(sub, cycles) {
+    cycles.sort((a, b) => a.startSerial - b.startSerial);
+    const symbol = (cycles.find((c) => c.symbol) || {}).symbol || "$";
+    const byYear = new Map();
+    for (const c of cycles) {
+      let b = byYear.get(c.year);
+      if (!b) {
+        b = { year: c.year, spanStart: c.start, spanEnd: c.end, cycleCount: 0,
+          pages: { base: 0, overage: 0, total: 0 }, cost: { base: 0, overage: 0, tax: 0, total: 0 } };
+        byYear.set(c.year, b);
+      }
+      b.cycleCount++;
+      if (c.start < b.spanStart) b.spanStart = c.start;
+      if (c.end > b.spanEnd) b.spanEnd = c.end;
+      for (const k of ["base", "overage", "total"]) b.pages[k] += c.pages[k];
+      for (const k of ["base", "overage", "tax", "total"]) b.cost[k] += c.cost[k];
+    }
+    const allTime = {
+      pages: cycles.reduce((s, c) => s + c.pages.total, 0),
+      cost: cycles.reduce((s, c) => s + c.cost.total, 0),
+    };
+    const n = cycles.length || 1; // annualize: plan is monthly, so 12 cycles ≈ a year
+    const avg = {
+      pages: { mean: (allTime.pages / n) * 12, median: median(cycles.map((c) => c.pages.total)) * 12 },
+      cost: { mean: (allTime.cost / n) * 12, median: median(cycles.map((c) => c.cost.total)) * 12 },
+    };
+    return { sub, symbol, cycles, byYear, allTime, avg,
+      first: cycles.length && cycles[0].start, last: cycles.length && cycles[cycles.length - 1].end };
   }
-  function num(n) { return n.toLocaleString("en-US"); }
+
+  function num(n) { return Number(n).toLocaleString("en-US"); }
 
   function buildText(d) {
     const years = [...d.byYear.keys()].sort((a, b) => a - b);
-    const grand = [...d.byYear.values()].reduce((a, b) => a + b, 0);
+    const $ = (n) => fmtMoney(n, d.symbol);
+    const costStr = (c) => {
+      let s = `base ${$(c.base)} · overage ${$(c.overage)}`;
+      if (c.tax > 0.0049) s += ` · tax ${$(c.tax)}`;
+      return s;
+    };
     const L = [];
-    L.push("HP Instant Ink — Pages Printed");
-    L.push(`Subscription ${d.sub} · ${d.cycleCount} billing cycles · ${d.first} → ${d.last}`);
-    L.push("─".repeat(64), "", "ANNUAL TOTALS");
-    const aMax = Math.max(0, ...d.byYear.values());
-    const aW = Math.max(...years.map((y) => num(d.byYear.get(y) || 0).length));
+    L.push("HP Instant Ink — Pages & Cost");
+    L.push(`Subscription ${d.sub} · ${d.cycles.length} billing cycles · ${fmtRange(d.first, d.last)}`);
+    L.push(`${num(d.allTime.pages)} pages · ${$(d.allTime.cost)} all-time`);
+    L.push("─".repeat(66), "");
+    L.push("PER-YEAR AVERAGE (annualized from billing cycles)");
+    L.push(`  Pages   mean ${num(Math.round(d.avg.pages.mean))}   median ${num(Math.round(d.avg.pages.median))}`);
+    L.push(`  Cost    mean ${$(d.avg.cost.mean)}   median ${$(d.avg.cost.median)}`);
+    L.push("", "ANNUAL SUMMARY  (each year = billing cycles ending that year)", "");
     for (const y of years) {
-      const v = d.byYear.get(y) || 0;
-      L.push(`  ${y}  ${num(v).padStart(aW)}  ${bar(v, aMax)}`);
+      const b = d.byYear.get(y);
+      L.push(`  ${y}   ${fmtRange(b.spanStart, b.spanEnd)} · ${b.cycleCount} cycle${b.cycleCount === 1 ? "" : "s"}`);
+      L.push(`         ${num(b.pages.total)} pages   base ${num(b.pages.base)} · overage ${num(b.pages.overage)}`);
+      L.push(`         ${$(b.cost.total)}   ${costStr(b.cost)}`);
+      L.push("");
     }
-    L.push(`  ${"─".repeat(4)}`, `  All   ${num(grand).padStart(aW)} pages total`, "", "MONTHLY BREAKDOWN");
-    const mMax = Math.max(0, ...d.byYM.values());
-    const mW = num(mMax).length;
+    L.push("  ────");
+    L.push(`  All    ${num(d.allTime.pages)} pages · ${$(d.allTime.cost)}`);
+    L.push("", "BILLING CYCLES", "");
     for (const y of years) {
-      L.push("", `── ${y} ──  (${num(d.byYear.get(y) || 0)} pages)`);
-      for (let m = 0; m < 12; m++) {
-        const v = d.byYM.get(y + "-" + m) || 0;
-        L.push(`  ${MONTHS[m]}  ${num(v).padStart(mW)}  ${bar(v, mMax)}`);
+      L.push(`── ends ${y} ──`);
+      for (const c of d.cycles.filter((c) => c.year === y)) {
+        L.push(`  ${fmtRange(c.start, c.end)}`);
+        L.push(`      ${num(c.pages.total)} pages   base ${num(c.pages.base)} · overage ${num(c.pages.overage)}   ${costStr(c.cost)} = ${$(c.cost.total)}`);
       }
+      L.push("");
     }
-    return L.join("\n");
+    return L.join("\n").replace(/\n+$/, "") + "\n";
   }
   function buildJson(d) {
+    const rc = (c) => ({ base: r2(c.base), overage: r2(c.overage), tax: r2(c.tax), total: r2(c.total) });
     return {
       subscription: d.sub,
       generated_at: new Date().toISOString(),
-      annual: Object.fromEntries([...d.byYear.entries()].sort((a, b) => a[0] - b[0])),
-      monthly: Object.fromEntries(
-        [...d.byYM.entries()].sort().map(([k, v]) => {
-          const [y, m] = k.split("-");
-          return [`${y}-${String(+m + 1).padStart(2, "0")}`, v];
-        })
-      ),
+      currency: d.symbol,
+      all_time: { pages: d.allTime.pages, cost: r2(d.allTime.cost) },
+      annual_average: {
+        note: "annualized from billing cycles (per-cycle figure × 12)",
+        pages: { mean: Math.round(d.avg.pages.mean), median: Math.round(d.avg.pages.median) },
+        cost: { mean: r2(d.avg.cost.mean), median: r2(d.avg.cost.median) },
+      },
+      annual: Object.fromEntries([...d.byYear.keys()].sort((a, b) => a - b).map((y) => {
+        const b = d.byYear.get(y);
+        return [String(y), { span: { start: b.spanStart, end: b.spanEnd }, cycles: b.cycleCount, pages: { ...b.pages }, cost: rc(b.cost) }];
+      })),
+      cycles: d.cycles.map((c) => ({ id: c.id, start: c.start, end: c.end, year: c.year, pages: { ...c.pages }, cost: rc(c.cost) })),
     };
   }
   function buildCsv(d) {
-    const rows = [["year", "month", "pages"]];
-    for (const [k, v] of [...d.byYM.entries()].sort()) {
-      const [y, m] = k.split("-");
-      rows.push([y, String(+m + 1).padStart(2, "0"), String(v)]);
+    const rows = [["cycle_start", "cycle_end", "year", "total_pages", "base_pages", "overage_pages", "base_cost", "overage_cost", "tax", "total_cost"]];
+    for (const c of d.cycles) {
+      rows.push([c.start, c.end, c.year, c.pages.total, c.pages.base, c.pages.overage, r2(c.cost.base), r2(c.cost.overage), r2(c.cost.tax), r2(c.cost.total)]);
     }
     return rows.map((r) => r.join(",")).join("\n");
   }
@@ -286,35 +358,35 @@
     const csv = buildCsv(d);
     const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
+    const $ = (n) => fmtMoney(n, d.symbol);
     const years = [...d.byYear.keys()].sort((a, b) => a - b);
-    const grand = [...d.byYear.values()].reduce((a, b) => a + b, 0);
-    const annualMax = Math.max(1, ...d.byYear.values());
-    const monthMax = Math.max(1, ...d.byYM.values());
-    const CMYK = ["#0098d4", "#e5007e", "#f5b500", "#16130f"]; // cyan magenta yellow key
+    const maxYP = Math.max(1, ...years.map((y) => d.byYear.get(y).pages.total));
+    const maxCP = Math.max(1, ...d.cycles.map((c) => c.pages.total));
+    const taxBit = (c) => (c.tax > 0.0049 ? ` &middot; tax ${$(c.tax)}` : "");
 
     const annualRows = years
       .map((y, i) => {
-        const v = d.byYear.get(y) || 0;
-        return `<div class=arow><span class=ayr>${y}</span>` +
-          `<span class=atrack><span class=afill style="--w:${(v / annualMax) * 100}%;--c:${CMYK[i % 4]};--d:${i * 80}ms"></span></span>` +
-          `<span class=aval>${num(v)}</span></div>`;
+        const b = d.byYear.get(y);
+        return `<div class=yrow>` +
+          `<div class=yhd><span class=yy>${y}</span><span class=ysub>${esc(fmtRange(b.spanStart, b.spanEnd))} &middot; ${b.cycleCount} cycle${b.cycleCount === 1 ? "" : "s"}</span></div>` +
+          `<div class=ybar><span class=segb style="--w:${(b.pages.base / maxYP) * 100}%;--d:${i * 80}ms"></span><span class=sego style="--w:${(b.pages.overage / maxYP) * 100}%;--d:${i * 80 + 80}ms"></span></div>` +
+          `<div class=yfig><span class=yp>${num(b.pages.total)} pages <em>base ${num(b.pages.base)} &middot; overage ${num(b.pages.overage)}</em></span>` +
+          `<span class=yc>${$(b.cost.total)} <em>base ${$(b.cost.base)} &middot; overage ${$(b.cost.overage)}${taxBit(b.cost)}</em></span></div>` +
+          `</div>`;
       })
       .join("");
 
-    const monthBlocks = years
+    const cycleBlocks = years
       .map((y) => {
-        const vals = MONTHS.map((_, m) => d.byYM.get(y + "-" + m) || 0);
-        const peak = Math.max(...vals);
-        const cols = vals
-          .map((v, m) =>
-            `<div class=col><span class=cval>${v ? num(v) : ""}</span>` +
-            `<span class=cwrap><span class="cbar${v && v === peak ? " peak" : ""}" style="--h:${(v / monthMax) * 100}%;--d:${m * 40}ms"></span></span>` +
-            `<span class=clab>${MONTHS[m]}</span></div>`
-          )
-          .join("");
-        return `<section class=yblock><header class=yhead><span class=yname>${y}</span>` +
-          `<span class=ytot>${num(d.byYear.get(y) || 0)} pages</span></header>` +
-          `<div class=months>${cols}</div></section>`;
+        const rows = d.cycles.filter((c) => c.year === y).map((c) =>
+          `<div class=cyrow>` +
+          `<span class=cyd>${esc(fmtRange(c.start, c.end))}</span>` +
+          `<span class=cybar><span class=segb style="--w:${(c.pages.base / maxCP) * 100}%"></span><span class=sego style="--w:${(c.pages.overage / maxCP) * 100}%"></span></span>` +
+          `<span class=cyp>${num(c.pages.total)} <em>${num(c.pages.base)}&middot;${num(c.pages.overage)}</em></span>` +
+          `<span class=cyc>${$(c.cost.total)}</span>` +
+          `</div>`
+        ).join("");
+        return `<section class=cyb><header class=cyh>ends ${y}</header>${rows}</section>`;
       })
       .join("");
 
@@ -342,37 +414,46 @@
 .eyebrow{font-size:10.5px;letter-spacing:.3em;text-transform:uppercase;color:#8f8676;font-weight:500}
 h1{font-weight:800;font-size:clamp(44px,9vw,82px);line-height:.9;letter-spacing:-.03em;margin:.16em 0 .34em}
 .meta{font-size:12px;color:#6e675a;letter-spacing:.02em}
-.hero{display:flex;align-items:baseline;gap:14px;margin:24px 0 18px}
-.hnum{font-weight:800;font-size:clamp(40px,7vw,62px);color:#e5007e;line-height:1;letter-spacing:-.02em}
+.hero{display:flex;align-items:baseline;gap:34px;flex-wrap:wrap;margin:24px 0 14px}
+.hstat{display:flex;flex-direction:column;gap:4px}
+.hnum{font-weight:800;font-size:clamp(38px,7vw,60px);color:#e5007e;line-height:1;letter-spacing:-.02em}
+.hnum.hk{color:#16130f;font-size:clamp(30px,5.5vw,48px)}
 .hlab{font-size:11px;text-transform:uppercase;letter-spacing:.22em;color:#6e675a}
+.avg{font-size:12px;color:#6e675a;letter-spacing:.01em;margin-bottom:22px}
+.avg b{color:#16130f;font-weight:700}
 .cmyk{display:flex;height:6px;width:118px;margin-bottom:24px;border-radius:1px;overflow:hidden}
 .cmyk i{flex:1}
 .tools{display:flex;flex-wrap:wrap;gap:10px}
 .tools button{font-family:inherit;font-size:11.5px;letter-spacing:.05em;padding:9px 16px;cursor:pointer;background:transparent;color:#16130f;border:1.5px solid #16130f;border-radius:2px;transition:.18s}
 .tools button:hover{background:#16130f;color:#f6f2e7}
 .sec{font-weight:700;font-size:12px;letter-spacing:.24em;text-transform:uppercase;margin:38px 0 18px;padding-bottom:9px;border-bottom:1px solid rgba(22,19,15,.16)}
-.annual{display:flex;flex-direction:column;gap:13px}
-.arow{display:grid;grid-template-columns:52px 1fr auto;align-items:center;gap:15px}
-.ayr{font-weight:700;font-size:14px}
-.atrack{height:22px;background:rgba(22,19,15,.07);border-radius:2px;overflow:hidden}
-.afill{display:block;height:100%;width:var(--w);background:var(--c);animation:grow .85s cubic-bezier(.2,.85,.2,1) var(--d) both}
-.aval{font-weight:700;font-size:13px;min-width:50px;text-align:right}
-.monthly{display:flex;flex-direction:column;gap:28px}
-.yhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
-.yname{font-weight:700;font-size:23px}
-.ytot{font-size:11.5px;color:#6e675a;letter-spacing:.04em}
-.months{display:grid;grid-template-columns:repeat(12,1fr);gap:6px}
-.col{display:flex;flex-direction:column;align-items:center;gap:5px}
-.cval{font-size:9.5px;color:#8f8676;height:13px;line-height:13px}
-.cwrap{height:120px;width:100%;display:flex;align-items:flex-end;justify-content:center}
-.cbar{width:62%;max-width:26px;height:var(--h);min-height:2px;background:#0098d4;border-radius:2px 2px 0 0;animation:growh .72s cubic-bezier(.2,.85,.2,1) var(--d) both}
-.cbar.peak{background:#e5007e}
-.clab{font-size:9.5px;color:#9a917f;text-transform:uppercase;letter-spacing:.02em}
-.foot{margin-top:32px;padding-top:15px;border-top:1px solid rgba(22,19,15,.13);font-size:10.5px;color:#9a917f;letter-spacing:.03em}
+.legend{font-size:10.5px;color:#9a917f;text-transform:none;letter-spacing:.02em;font-weight:500}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin:0 3px 0 9px;vertical-align:middle}
+.ann{display:flex;flex-direction:column;gap:20px}
+.yrow{display:flex;flex-direction:column;gap:8px}
+.yhd{display:flex;align-items:baseline;gap:12px}
+.yy{font-weight:800;font-size:22px;letter-spacing:-.01em}
+.ysub{font-size:11px;color:#8f8676;letter-spacing:.02em}
+.ybar{display:flex;height:18px;background:rgba(22,19,15,.07);border-radius:2px;overflow:hidden}
+.segb,.sego{display:block;height:100%;width:var(--w);animation:grow .85s cubic-bezier(.2,.85,.2,1) var(--d,0ms) both}
+.segb{background:#0098d4}
+.sego{background:#e5007e}
+.yfig{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:13px;font-weight:700}
+.yfig em{font-style:normal;font-weight:500;color:#6e675a;font-size:11.5px;margin-left:6px}
+.yc{text-align:right}
+.cycles{display:flex;flex-direction:column;gap:26px}
+.cyb{display:flex;flex-direction:column;gap:8px}
+.cyh{font-weight:700;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#9a917f}
+.cyrow{display:grid;grid-template-columns:minmax(118px,1.3fr) minmax(60px,1fr) auto auto;align-items:center;gap:10px 14px}
+.cyd{font-size:12px;font-weight:600}
+.cybar{display:flex;height:11px;background:rgba(22,19,15,.06);border-radius:2px;overflow:hidden}
+.cyp{font-size:11.5px;text-align:right;white-space:nowrap}
+.cyp em{font-style:normal;color:#9a917f}
+.cyc{font-weight:700;font-size:12.5px;text-align:right;min-width:62px}
+.foot{margin-top:32px;padding-top:15px;border-top:1px solid rgba(22,19,15,.13);font-size:10.5px;color:#9a917f;letter-spacing:.03em;line-height:1.6}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 @keyframes rise{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
 @keyframes grow{from{width:0}to{width:var(--w)}}
-@keyframes growh{from{height:0}to{height:var(--h)}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important}}`;
 
     root.innerHTML =
@@ -382,14 +463,18 @@ h1{font-weight:800;font-size:clamp(44px,9vw,82px);line-height:.9;letter-spacing:
       `<button class=x title="Close (Esc)" aria-label=Close>&times;</button>` +
       `<div class=scroll>` +
       `<div class=eyebrow>HP Instant Ink &middot; Usage Statement</div>` +
-      `<h1>Pages<br>Printed</h1>` +
-      `<div class=meta>Subscription ${esc(d.sub)} &nbsp;&middot;&nbsp; ${esc(d.cycleCount)} billing cycles &nbsp;&middot;&nbsp; ${esc(d.first)} &rarr; ${esc(d.last)}</div>` +
-      `<div class=hero><span class=hnum>${num(grand)}</span><span class=hlab>pages, all&#8209;time</span></div>` +
+      `<h1>Pages<br>&amp; Cost</h1>` +
+      `<div class=meta>Subscription ${esc(d.sub)} &nbsp;&middot;&nbsp; ${d.cycles.length} billing cycles &nbsp;&middot;&nbsp; ${esc(fmtRange(d.first, d.last))}</div>` +
+      `<div class=hero>` +
+        `<div class=hstat><span class=hnum>${num(d.allTime.pages)}</span><span class=hlab>pages, all&#8209;time</span></div>` +
+        `<div class=hstat><span class="hnum hk">${$(d.allTime.cost)}</span><span class=hlab>billed, all&#8209;time</span></div>` +
+      `</div>` +
+      `<div class=avg>Annualized average &middot; <b>Pages</b> mean ${num(Math.round(d.avg.pages.mean))} / median ${num(Math.round(d.avg.pages.median))} &nbsp;&middot;&nbsp; <b>Cost</b> mean ${$(d.avg.cost.mean)} / median ${$(d.avg.cost.median)}</div>` +
       `<div class=cmyk><i style="background:#0098d4"></i><i style="background:#e5007e"></i><i style="background:#f5b500"></i><i style="background:#16130f"></i></div>` +
       `<div class=tools><button data-a=copy>Copy report</button><button data-a=json>Download JSON</button><button data-a=csv>Download CSV</button></div>` +
-      `<h2 class=sec>Annual totals</h2><div class=annual>${annualRows}</div>` +
-      `<h2 class=sec>Monthly breakdown</h2><div class=monthly>${monthBlocks}</div>` +
-      `<div class=foot>Generated ${esc(new Date().toLocaleString())} &middot; the ASCII version is on &ldquo;Copy report&rdquo;.</div>` +
+      `<h2 class=sec>Annual summary <span class=legend><i style="background:#0098d4"></i>base<i style="background:#e5007e"></i>overage</span></h2><div class=ann>${annualRows}</div>` +
+      `<h2 class=sec>Billing cycles</h2><div class=cycles>${cycleBlocks}</div>` +
+      `<div class=foot>Each year = billing cycles ending in it &middot; costs are HP's own per-cycle charges &middot; the plain-text version is on &ldquo;Copy report&rdquo;.</div>` +
       `</div></div></div>`;
 
     const close = () => { host.remove(); document.removeEventListener("keydown", onKey); };

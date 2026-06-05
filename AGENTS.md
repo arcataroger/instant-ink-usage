@@ -8,7 +8,8 @@ works and what will break" version.
 
 A single **browser bookmarklet** that reads your HP Instant Ink printing history
 from HP's own dashboard API (using your already-logged-in browser session) and
-renders an annual + monthly "pages printed" report as an in-page modal.
+renders a per-billing-cycle "pages & cost" report — base vs overage pages and
+charges, an annual summary, and annualized averages — as an in-page modal.
 
 There is **no backend, no build-time secret, no dependency**. The whole program
 is one file: [`bookmarklet.src.js`](bookmarklet.src.js). Everything else is
@@ -62,15 +63,21 @@ All of this happens client-side, in the origin of the page the user runs it on
    prefer these over recomputing from `plan` rates. Money fields are display
    strings (`"$1.79"`, and `regular_price` is `"$1.79 Plan"`); `start_date`/
    `end_date` have no year (derive it from the daily `x` serials).
-5. **Bucket usage by calendar month/year.** Each cycle has
-   `daily_usage.{regular,rollover,overage,trial,credit_pages}`, arrays of
-   `{x, y}` points where **`x` = whole days since the Unix epoch (1970-01-01 UTC)**
-   and `y` = pages printed that day. Summing `y` across *all* series equals the
-   cycle's `totals.total_pages`. Billing cycles run ~25th→24th, so each day is
-   assigned to its real calendar month/year rather than to the cycle.
+5. **Build a per-cycle model + annual rollup.** Each cycle becomes a flat record:
+   pages (`base = total_pages − additional_pages`, `overage = additional_pages`,
+   `total`) and cost (`base`/`overage`/`tax`/`total`) read from `totals`, plus the
+   real start/end dates from the span of `daily_usage` `x` serials (**`x` = whole
+   days since 1970-01-01 UTC**; the date strings omit the year). **Attribution
+   rule:** a cycle belongs to the calendar year it **ends** in, and every metric
+   (pages and cost) follows that single rule, so years never disagree. Annual
+   buckets sum the cycles ending that year and record the actual covered span.
+   Annual averages are **annualized from cycles** (per-cycle mean/median × 12).
 6. **Render.** An in-page modal inside a Shadow DOM (style-isolated from HP's
-   page). Annual horizontal bars + per-year 12-column monthly charts, plus
-   copy/JSON/CSV export.
+   page): all-time pages + cost, annualized averages, an **annual summary**
+   (stacked base/overage page bars + base/overage[/tax] cost per year) and a
+   **per-cycle breakdown** grouped by year. Copy (ASCII) / JSON / CSV export, all
+   driven by the same model. Costs are HP's own per-cycle figures — never
+   recomputed from rates, never split across calendar boundaries.
 
 ## Build & deploy
 
