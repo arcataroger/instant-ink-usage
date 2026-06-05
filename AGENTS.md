@@ -35,14 +35,20 @@ GitHub Pages is configured to serve from `main` branch, `/docs` folder →
 All of this happens client-side, in the origin of the page the user runs it on
 (must be `portal.hpsmart.com`). Numbered to match the comments in the source:
 
-1. **Find the subscription id.** Scrapes `document.body.innerText` for
-   `Subscription ID: <digits>`, then falls back to the URL, then a `prompt()`.
-2. **Get a working bearer token.** Builds a set of candidate JWTs by (a) scanning
+0. **Make sure we're on the portal.** If `location.hostname` isn't
+   `portal.hpsmart.com`, offer (via `confirm()`) to redirect to the account-history
+   URL and bail; the user re-clicks the bookmark once it loads. Everything below
+   needs the live HP session, which is host-wide.
+1. **Get a working bearer token.** Builds a set of candidate JWTs by (a) scanning
    `sessionStorage`/`localStorage` for anything matching a JWT regex (including
    inside JSON blobs), and (b) minting one via `POST /api/session/v3/token`
-   (cookie-authed, same origin). It then **probes each candidate** against the
-   API and keeps the first that returns `200`. This avoids hard-coding which
-   storage key or token field is "the" token.
+   (cookie-authed, same origin). This avoids hard-coding which storage key or
+   token field is "the" token.
+2. **Identify the account.** Probes each candidate token against
+   `GET /api/dashboard/v1/user?isAgentSession=false`; the first that returns `200`
+   is our token, and the subscription id is read from that response
+   (`lastViewedAccountIdentifier`, else `accountIdentifiers[0]` — a ~10-digit
+   number). No page scraping, so it works on **any** signed-in portal page.
 3. **Enumerate billing cycles.** `GET /api/dashboard/v1/subscription/{sub}/activities`
    returns account events; each one with an `activity.invoice_download_link` of
    the form `/billing_cycles/{id}/pdf` yields a billing-cycle id. IDs are opaque
@@ -106,8 +112,8 @@ wrong numbers.
 ### 1. Token acquisition (most fragile)
 - **Depends on:** the mint endpoint `POST /api/session/v3/token` with body
   `{tenantType:"orgless",shellTenantsData:{}}`, and/or a JWT being findable in
-  `sessionStorage`/`localStorage`, and that token being accepted by the dashboard
-  API.
+  `sessionStorage`/`localStorage`, and that token being accepted by `GET /user`
+  (the probe that both validates the token and yields the account id).
 - **Fails as:** "couldn't get a working token — are you logged in on this page?"
 - **To fix:** log in, open DevTools → Network on the account-history page, find
   the request the dashboard makes to `instantink.hpconnected.com` and look at its
@@ -144,12 +150,17 @@ wrong numbers.
   instructions (and `PORTAL` in `build-bookmarklet.mjs`) to that origin. The
   bookmarklet must be run from an origin the API trusts.
 
-### 5. Subscription-id scraping
-- **Depends on:** the page text containing `Subscription ID: <digits>`.
-- **Fails as:** a `prompt()` asking the user to type it (graceful), or "no
-  subscription id" if they cancel.
-- **To fix:** update the regex in step 1 to match new page wording, or pull the
-  id from one of the page's own API calls.
+### 5. Subscription-id discovery (`/user`)
+- **Depends on:** `GET /api/dashboard/v1/user?isAgentSession=false` returning
+  `lastViewedAccountIdentifier` / `accountIdentifiers[]` (the ~10-digit account
+  id the `/subscription/{id}/...` calls expect). Replaced the old DOM scrape.
+- **Fails as:** "you're signed in, but this HP profile doesn't seem to have an
+  Instant Ink subscription."
+- **Watch for:** a renamed field, a non-numeric id, or **multiple accounts**
+  (today we just take the last-viewed/first one; a multi-subscription user would
+  need a picker).
+- **To fix:** inspect a real `/user` response and update the field extraction in
+  step 2.
 
 ### 6. Endpoint base path / API version
 - **Depends on:** `https://instantink.hpconnected.com/api/dashboard/v1`. If HP

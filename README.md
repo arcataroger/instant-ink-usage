@@ -1,5 +1,8 @@
 # Instant Ink Usage 🖨️📊
 
+A free bookmarklet to check your **HP Instant Ink usage history** — see how many
+pages you've printed each month and each year.
+
 Ever wonder how many pages you've *actually* printed on your HP Instant Ink
 plan? This little tool shows your **whole printing history** — every month and
 every year — as a clean, friendly chart.

@@ -6,9 +6,10 @@
  *
  * It runs in that page's origin with your live session, so to HP it looks like
  * the dashboard's own traffic. It:
- *   1. finds your subscription id (scraped from the page),
- *   2. obtains a usable bearer token (scans storage + mints one, then probes
- *      each candidate against the API and keeps whichever returns 200),
+ *   1. obtains a usable bearer token (scans storage + mints one, then probes
+ *      each candidate against /user and keeps whichever returns 200),
+ *   2. reads your subscription id straight from that /user response (no page
+ *      scraping, so it works anywhere you're signed in on portal.hpsmart.com),
  *   3. lists every billing cycle via /activities,
  *   4. fetches each /billing_cycle/{id},
  *   5. buckets daily_usage into true calendar months/years,
@@ -24,6 +25,23 @@
   const EPOCH_MS = Date.UTC(1970, 0, 1);
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const JWT_RE = /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/;
+  const HISTORY_URL = "https://portal.hpsmart.com/us/en/print_plans/account_history";
+
+  // ---- 0. make sure we're on the HP portal --------------------------------
+  // The script needs your live HP session and scrapes your Subscription ID off
+  // the Print and Payment History page, so it only works on portal.hpsmart.com.
+  // If we're somewhere else, offer to send the user there (then they re-click
+  // the bookmark) rather than asking them to type an account number by hand.
+  if (location.hostname !== "portal.hpsmart.com" && !window.__IIPREVIEW) {
+    if (confirm(
+      "Instant Ink Usage needs to run on your HP account page, where you're already signed in.\n\n" +
+      "Go to your HP Instant Ink \"Print and Payment History\" page now?\n\n" +
+      "(Once it loads, click the Instant Ink Usage bookmark again.)"
+    )) {
+      location.href = HISTORY_URL;
+    }
+    return;
+  }
 
   // ---- status chip (centered top, styled to match the report) -------------
   const box = document.createElement("div");
@@ -53,14 +71,7 @@
   say("Getting ready…");
 
   try {
-    // ---- 1. subscription id ------------------------------------------------
-    let sub = (document.body.innerText.match(/Subscription\s*ID:?\s*(\d{6,})/i) || [])[1];
-    if (!sub) sub = (location.href.match(/subscription[/=](\d{6,})/i) || [])[1];
-    if (!sub) sub = prompt("We couldn't find your account number on this page. It's shown on your HP Instant Ink page as \"Subscription ID\". Please type it here:") || "";
-    sub = sub.trim();
-    if (!/^\d+$/.test(sub)) throw new Error("Couldn't find your HP Instant Ink account number. Please open your Print and Payment History page and try again.");
-
-    // ---- 2. obtain a working bearer token ----------------------------------
+    // ---- 1. obtain a working bearer token ----------------------------------
     const candidates = new Set();
 
     // (a) scan storages for anything that looks like a JWT
@@ -84,12 +95,22 @@
       if (r.ok) deepCollectJwts(await r.json().catch(() => null), candidates);
     } catch {}
 
+    // ---- 2. identify the account -------------------------------------------
+    // Probe each candidate token against /user (no subscription id required);
+    // the first that returns 200 is our token, and its body carries the
+    // account id — so we never have to scrape it off the page.
     say("Connecting to your HP account…");
     let token = null;
+    let sub = null;
     for (const t of candidates) {
-      if (await probe(sub, t)) { token = t; break; }
+      const user = await fetchUser(t);
+      if (!user) continue;
+      token = t;
+      sub = String(user.lastViewedAccountIdentifier || (user.accountIdentifiers || [])[0] || "").trim();
+      break;
     }
     if (!token) throw new Error("Couldn't connect to your HP account. Please make sure you're signed in on this page, then try again.");
+    if (!/^\d+$/.test(sub)) throw new Error("You're signed in, but this HP profile doesn't seem to have an Instant Ink subscription.");
 
     // ---- 3. enumerate billing cycles via /activities -----------------------
     say("Finding your printing history…");
@@ -153,11 +174,11 @@
   function authHeaders(token) {
     return { Authorization: token.startsWith("Bearer ") ? token : "Bearer " + token, Accept: "application/json" };
   }
-  async function probe(sub, token) {
+  async function fetchUser(token) {
     try {
-      const r = await fetch(`${API}/subscription/${sub}/activities`, { headers: authHeaders(token) });
-      return r.ok;
-    } catch { return false; }
+      const r = await fetch(`${API}/user?isAgentSession=false`, { headers: authHeaders(token) });
+      return r.ok ? await r.json() : null;
+    } catch { return null; }
   }
   async function apiGet(url, token) {
     const r = await fetch(url, { headers: authHeaders(token) });

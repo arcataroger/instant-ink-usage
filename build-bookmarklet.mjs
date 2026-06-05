@@ -25,13 +25,57 @@ await writeFile(here("./build/bookmarklet.txt"), url + "\n");
 
 const REPO = "https://github.com/arcataroger/instant-ink-usage";
 const PORTAL = "https://portal.hpsmart.com/us/en/print_plans/account_history";
+const SITE = "https://arcataroger.github.io/instant-ink-usage/";
+const OG_IMAGE = SITE + "screenshot.png";
 
 const indexHtml = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Install · Instant Ink Usage</title>
+<title>HP Instant Ink Usage History — See Pages Printed Per Month &amp; Year (Free)</title>
+<meta name="description" content="A free, open-source bookmarklet that shows your full HP Instant Ink printing history — how many pages you've printed each month and year. Runs in your browser, never sees your password, nothing is uploaded.">
+<link rel="canonical" href="${SITE}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="HP Instant Ink Usage History — Pages Printed Per Month & Year">
+<meta property="og:description" content="Free bookmarklet to see your whole HP Instant Ink printing history. Runs in your browser, never sees your password.">
+<meta property="og:url" content="${SITE}">
+<meta property="og:image" content="${OG_IMAGE}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="HP Instant Ink Usage History — Pages Printed Per Month & Year">
+<meta name="twitter:description" content="Free bookmarklet to see your whole HP Instant Ink printing history. Runs in your browser, never sees your password.">
+<meta name="twitter:image" content="${OG_IMAGE}">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Instant Ink Usage",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "Any (web browser)",
+      "url": "${SITE}",
+      "description": "A bookmarklet that displays your full HP Instant Ink printing history by month and year, using the HP login already in your browser.",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "isAccessibleForFree": true
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": "How do I see how many pages I've printed on HP Instant Ink?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Add the Instant Ink Usage bookmarklet to your bookmarks bar, open your HP Instant Ink Print and Payment History page while signed in, and click it. A report shows the pages you've printed per month and per year." } },
+        { "@type": "Question", "name": "Does it need my HP password?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. It uses the HP login session already in your browser and never sees, asks for, or stores your password." } },
+        { "@type": "Question", "name": "Is my usage data uploaded anywhere?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. Everything runs locally in your browser. The only site it talks to is HP's own dashboard. CSV and JSON downloads save straight to your computer." } },
+        { "@type": "Question", "name": "Is it free?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. It is free and open source, released into the public domain under CC0 1.0. You can read every line of the source code before using it." } }
+      ]
+    }
+  ]
+}
+</script>
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
@@ -61,6 +105,11 @@ const indexHtml = `<!doctype html>
   #copy { font:inherit; font-size:12.5px; margin-top:4px; padding:9px 16px; border:1.5px solid #16130f;
     border-radius:3px; background:transparent; color:#16130f; cursor:pointer; }
   .hint { font-size:12.5px; color:#6e675a; }
+  .steph { font-size:14.5px; font-weight:700; margin:0 0 2px; }
+  .faq { font-weight:700; font-size:12px; letter-spacing:.24em; text-transform:uppercase;
+    margin:30px 0 14px; color:#8f8676; }
+  .q { font-size:14px; font-weight:700; margin:14px 0 2px; }
+  .a { font-size:13.5px; color:#3b362d; margin:0; }
   hr { border:none; border-top:1px solid rgba(22,19,15,.15); margin:30px 0; }
   .shot { width:100%; border:1px solid rgba(22,19,15,.15); border-radius:6px; margin-top:10px; }
 </style>
@@ -77,28 +126,45 @@ const indexHtml = `<!doctype html>
   <hr>
 
   <div class="step"><div class="n">1</div><div>
-    <strong>Drag this button up to your bookmarks bar:</strong><br>
+    <h2 class="steph">Drag this button up to your bookmarks bar:</h2>
     <a class="drag" href="${url}">📊 Instant Ink Usage</a>
     <div class="hint">Can't drag? <button id="copy">Copy the code</button> then make a new
     bookmark and paste it as the address. <span id="copied" style="color:#0098d4"></span></div>
   </div></div>
 
   <div class="step"><div class="n">2</div><div>
-    <strong>Open your HP Instant Ink history and sign in:</strong><br>
+    <h2 class="steph">Open your HP Instant Ink history and sign in:</h2>
     <a class="btn2" href="${PORTAL}" target="_blank" rel="noopener">Open Print &amp; Payment History →</a>
     <div class="hint">This is HP's own page (portal.hpsmart.com). Log in there like normal.</div>
   </div></div>
 
   <div class="step"><div class="n">3</div><div>
-    <strong>Click the “Instant Ink Usage” bookmark.</strong><br>
+    <h2 class="steph">Click the “Instant Ink Usage” bookmark.</h2>
     <span class="hint">Your report appears right on the page. You can copy it or download it
     as a spreadsheet (CSV) or JSON file.</span>
   </div></div>
 
   <hr>
+
+  <h2 class="faq">Common questions</h2>
+  <h3 class="q">How do I see how many pages I've printed on HP Instant Ink?</h3>
+  <p class="a">Add the bookmarklet above to your bookmarks bar, open your HP Instant Ink
+  Print and Payment History page while signed in, and click it. A report shows the pages
+  you've printed per month and per year.</p>
+  <h3 class="q">Does it need my HP password?</h3>
+  <p class="a">No. It uses the HP login session already in your browser and never sees,
+  asks for, or stores your password.</p>
+  <h3 class="q">Is my usage data uploaded anywhere?</h3>
+  <p class="a">No. Everything runs locally in your browser. The only site it talks to is
+  HP's own dashboard. CSV and JSON downloads save straight to your computer.</p>
+  <h3 class="q">Is it free?</h3>
+  <p class="a">Yes — free and open source, released into the public domain (CC0&nbsp;1.0).
+  You can read every line of the <a href="${REPO}">source code on GitHub</a> before using it.</p>
+
+  <hr>
   <p class="hint">Free &amp; open source (public domain). Want the details, the code, or to
   see exactly what it does? <a href="${REPO}">Read more on GitHub →</a></p>
-  <img class="shot" src="screenshot.png" alt="Example of the usage report">
+  <img class="shot" src="screenshot.png" alt="HP Instant Ink usage report showing pages printed per month and per year">
 </div>
 <script>
   document.getElementById("copy").addEventListener("click", async function () {

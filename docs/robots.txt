@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://arcataroger.github.io/instant-ink-usage/sitemap.xml

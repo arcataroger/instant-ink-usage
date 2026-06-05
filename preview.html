@@ -2,9 +2,11 @@
 <meta charset="utf-8">
 <title>bookmarklet preview</title>
 <body style="margin:0;height:100vh;background:#dcd7cb">
-<div style="padding:40px;font:14px system-ui">Host page (HP portal stand-in). Plan Details — Subscription ID: 1234567890</div>
+<div style="padding:40px;font:14px system-ui">Host page (HP portal stand-in) — signed in.</div>
 <script>
 // ---- mock the browser/network so the real bookmarklet runs end-to-end ----
+// Tell the bookmarklet to skip its portal.hpsmart.com host check (we're file://).
+window.__IIPREVIEW = true;
 const JWT = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJwcmV2aWV3In0.sig";
 function monthOfId(id) { // map cycle id -> [year, month0] over Jan 2023 .. Jun 2026
   const n = Number(id); const start = 2023 * 12; const idx = start + n;
@@ -18,6 +20,7 @@ const NCYCLES = 42; // Jan 2023 .. Jun 2026
 window.fetch = async (url, opts) => {
   const u = String(url);
   if (u.includes("/api/session/v3/token")) return { ok:true, json: async () => ({ token: JWT }) };
+  if (u.includes("/api/dashboard/v1/user")) return { ok:true, json: async () => ({ lastViewedAccountIdentifier:"1234567890", accountIdentifiers:["1234567890"] }) };
   if (u.endsWith("/activities")) {
     const activities = [];
     for (let n = NCYCLES - 1; n >= 0; n--)
