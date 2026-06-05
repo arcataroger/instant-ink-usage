@@ -380,10 +380,15 @@
       .map((y) => {
         const rows = d.cycles.filter((c) => c.year === y).map((c) =>
           `<div class=cyrow>` +
-          `<span class=cyd>${esc(fmtRange(c.start, c.end))}</span>` +
-          `<span class=cybar><span class=segb style="--w:${(c.pages.base / maxCP) * 100}%"></span><span class=sego style="--w:${(c.pages.overage / maxCP) * 100}%"></span></span>` +
-          `<span class=cyp>${num(c.pages.total)} <em>${num(c.pages.base)}&middot;${num(c.pages.overage)}</em></span>` +
-          `<span class=cyc>${$(c.cost.total)}</span>` +
+          `<div class=cytop>` +
+            `<span class=cyd>${esc(fmtRange(c.start, c.end))}</span>` +
+            `<span class=cybar><span class=segb style="--w:${(c.pages.base / maxCP) * 100}%"></span><span class=sego style="--w:${(c.pages.overage / maxCP) * 100}%"></span></span>` +
+            `<span class=cyc>${$(c.cost.total)}</span>` +
+          `</div>` +
+          `<div class=cyfig>` +
+            `<span><b>${num(c.pages.total)} pages</b><em>base ${num(c.pages.base)} &middot; overage ${num(c.pages.overage)}</em></span>` +
+            `<span><b>cost</b><em>base ${$(c.cost.base)} &middot; overage ${$(c.cost.overage)}${taxBit(c.cost)}</em></span>` +
+          `</div>` +
           `</div>`
         ).join("");
         return `<section class=cyb><header class=cyh>ends ${y}</header>${rows}</section>`;
@@ -437,19 +442,21 @@ h1{font-weight:800;font-size:clamp(44px,9vw,82px);line-height:.9;letter-spacing:
 .ybar{display:flex;height:18px;background:rgba(22,19,15,.07);border-radius:2px;overflow:hidden}
 .segb,.sego{display:block;height:100%;width:var(--w);animation:grow .85s cubic-bezier(.2,.85,.2,1) var(--d,0ms) both}
 .segb{background:#0098d4}
-.sego{background:#e5007e}
+.sego{background:#d35400}
 .yfig{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:13px;font-weight:700}
 .yfig em{font-style:normal;font-weight:500;color:#6e675a;font-size:11.5px;margin-left:6px}
 .yc{text-align:right}
-.cycles{display:flex;flex-direction:column;gap:26px}
-.cyb{display:flex;flex-direction:column;gap:8px}
+.cycles{display:flex;flex-direction:column;gap:22px}
+.cyb{display:flex;flex-direction:column;gap:15px}
 .cyh{font-weight:700;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#9a917f}
-.cyrow{display:grid;grid-template-columns:minmax(118px,1.3fr) minmax(60px,1fr) auto auto;align-items:center;gap:10px 14px}
-.cyd{font-size:12px;font-weight:600}
+.cyrow{display:flex;flex-direction:column;gap:5px}
+.cytop{display:grid;grid-template-columns:1fr minmax(110px,210px) 66px;align-items:center;gap:13px}
+.cyd{font-size:12.5px;font-weight:600}
 .cybar{display:flex;height:11px;background:rgba(22,19,15,.06);border-radius:2px;overflow:hidden}
-.cyp{font-size:11.5px;text-align:right;white-space:nowrap}
-.cyp em{font-style:normal;color:#9a917f}
-.cyc{font-weight:700;font-size:12.5px;text-align:right;min-width:62px}
+.cyc{font-weight:700;font-size:13px;text-align:right}
+.cyfig{display:flex;justify-content:space-between;flex-wrap:wrap;gap:2px 16px;font-size:11.5px}
+.cyfig b{font-weight:700}
+.cyfig em{font-style:normal;color:#8f8676;margin-left:5px}
 .foot{margin-top:32px;padding-top:15px;border-top:1px solid rgba(22,19,15,.13);font-size:10.5px;color:#9a917f;letter-spacing:.03em;line-height:1.6}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 @keyframes rise{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
@@ -472,8 +479,8 @@ h1{font-weight:800;font-size:clamp(44px,9vw,82px);line-height:.9;letter-spacing:
       `<div class=avg>Annualized average &middot; <b>Pages</b> mean ${num(Math.round(d.avg.pages.mean))} / median ${num(Math.round(d.avg.pages.median))} &nbsp;&middot;&nbsp; <b>Cost</b> mean ${$(d.avg.cost.mean)} / median ${$(d.avg.cost.median)}</div>` +
       `<div class=cmyk><i style="background:#0098d4"></i><i style="background:#e5007e"></i><i style="background:#f5b500"></i><i style="background:#16130f"></i></div>` +
       `<div class=tools><button data-a=copy>Copy report</button><button data-a=json>Download JSON</button><button data-a=csv>Download CSV</button></div>` +
-      `<h2 class=sec>Annual summary <span class=legend><i style="background:#0098d4"></i>base<i style="background:#e5007e"></i>overage</span></h2><div class=ann>${annualRows}</div>` +
-      `<h2 class=sec>Billing cycles</h2><div class=cycles>${cycleBlocks}</div>` +
+      `<h2 class=sec>Annual summary <span class=legend><i style="background:#0098d4"></i>base<i style="background:#d35400"></i>overage</span></h2><div class=ann>${annualRows}</div>` +
+      `<h2 class=sec>Billing cycles <span class=legend><i style="background:#0098d4"></i>base<i style="background:#d35400"></i>overage</span></h2><div class=cycles>${cycleBlocks}</div>` +
       `<div class=foot>Each year = billing cycles ending in it &middot; costs are HP's own per-cycle charges &middot; the plain-text version is on &ldquo;Copy report&rdquo;.</div>` +
       `</div></div></div>`;
 
