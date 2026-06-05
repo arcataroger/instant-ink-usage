@@ -109,7 +109,22 @@
       sub = String(user.lastViewedAccountIdentifier || (user.accountIdentifiers || [])[0] || "").trim();
       break;
     }
-    if (!token) throw new Error("Couldn't connect to your HP account. Please make sure you're signed in on this page, then try again.");
+    if (!token) {
+      // No token the API will accept → not signed in (or the session expired).
+      // Offer to (re)open the history page, where HP shows its own login prompt;
+      // we never hardcode an HP login URL of our own.
+      if (confirm(
+        "You don't seem to be signed in to HP (or your session has expired).\n\n" +
+        "Open your HP Instant Ink page to sign in now? Once you're signed in, " +
+        "click the Instant Ink Usage bookmark again."
+      )) {
+        location.href = HISTORY_URL;
+        return;
+      }
+      fail("You don't seem to be signed in to HP. Please sign in and try again.");
+      setTimeout(() => box.remove(), 9000);
+      return;
+    }
     if (!/^\d+$/.test(sub)) throw new Error("You're signed in, but this HP profile doesn't seem to have an Instant Ink subscription.");
 
     // ---- 3. enumerate billing cycles via /activities -----------------------

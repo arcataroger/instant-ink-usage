@@ -114,7 +114,10 @@ wrong numbers.
   `{tenantType:"orgless",shellTenantsData:{}}`, and/or a JWT being findable in
   `sessionStorage`/`localStorage`, and that token being accepted by `GET /user`
   (the probe that both validates the token and yields the account id).
-- **Fails as:** "couldn't get a working token — are you logged in on this page?"
+- **Fails as:** a "you don't seem to be signed in to HP" `confirm()` offering to
+  open the history page (where HP shows its own login), then a red status chip if
+  declined. Login state is detected purely by capability — whether any candidate
+  token is accepted by `/user` — never by sniffing cookie/token names.
 - **To fix:** log in, open DevTools → Network on the account-history page, find
   the request the dashboard makes to `instantink.hpconnected.com` and look at its
   `Authorization` header; trace where the SPA got that token (storage, or a mint
