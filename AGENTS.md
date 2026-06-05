@@ -214,9 +214,11 @@ reusing the human's real session. Keep it that way.
   rendered in a **Shadow DOM** for style isolation. It uses only the system
   sans-serif stack — **no web-font / Google Fonts dependency** (don't reintroduce
   one; it can be blocked by a host page's CSP and adds an external request).
-- **Base vs overage** in charts uses a colorblind-safe **blue `#0098d4` / orange
-  `#d35400`** pair (Okabe–Ito) and is **never encoded by color alone** — every
-  bar is paired with a text legend and spelled-out `base`/`overage` labels. Don't
-  go back to the cyan/magenta pair (fails red-blind viewers).
+- **Base vs overage** in charts keeps the brand CMYK look — **cyan `#0098d4`
+  base, magenta `#e5007e` overage** — but is **never encoded by color alone**:
+  the overage segment is a **diagonal stripe pattern** (`repeating-linear-gradient`,
+  magenta two-tone) so it's distinguishable by texture, and every chart has a
+  text legend plus spelled-out `base`/`overage` labels. Keep the stripe (it's the
+  colorblind-safe cue) if you touch `.sego`/`.legend .swo`.
 - Don't add analytics, network calls to anything other than HP, or anything that
   transmits the user's data off their machine. Safety is a feature.

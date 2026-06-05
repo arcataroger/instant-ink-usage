@@ -433,7 +433,8 @@ h1{font-weight:800;font-size:clamp(44px,9vw,82px);line-height:.9;letter-spacing:
 .tools button:hover{background:#16130f;color:#f6f2e7}
 .sec{font-weight:700;font-size:12px;letter-spacing:.24em;text-transform:uppercase;margin:38px 0 18px;padding-bottom:9px;border-bottom:1px solid rgba(22,19,15,.16)}
 .legend{font-size:10.5px;color:#9a917f;text-transform:none;letter-spacing:.02em;font-weight:500}
-.legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin:0 3px 0 9px;vertical-align:middle}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin:0 3px 0 9px;vertical-align:middle}
+.legend .swo{background:repeating-linear-gradient(45deg,#e5007e 0 2px,#c2006a 2px 4px)}
 .ann{display:flex;flex-direction:column;gap:20px}
 .yrow{display:flex;flex-direction:column;gap:8px}
 .yhd{display:flex;align-items:baseline;gap:12px}
@@ -442,7 +443,7 @@ h1{font-weight:800;font-size:clamp(44px,9vw,82px);line-height:.9;letter-spacing:
 .ybar{display:flex;height:18px;background:rgba(22,19,15,.07);border-radius:2px;overflow:hidden}
 .segb,.sego{display:block;height:100%;width:var(--w);animation:grow .85s cubic-bezier(.2,.85,.2,1) var(--d,0ms) both}
 .segb{background:#0098d4}
-.sego{background:#d35400}
+.sego{background:repeating-linear-gradient(45deg,#e5007e 0 5px,#c2006a 5px 10px)}
 .yfig{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:13px;font-weight:700}
 .yfig em{font-style:normal;font-weight:500;color:#6e675a;font-size:11.5px;margin-left:6px}
 .yc{text-align:right}
@@ -450,8 +451,8 @@ h1{font-weight:800;font-size:clamp(44px,9vw,82px);line-height:.9;letter-spacing:
 .cyb{display:flex;flex-direction:column;gap:15px}
 .cyh{font-weight:700;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#9a917f}
 .cyrow{display:flex;flex-direction:column;gap:5px}
-.cytop{display:grid;grid-template-columns:1fr minmax(110px,210px) 66px;align-items:center;gap:13px}
-.cyd{font-size:12.5px;font-weight:600}
+.cytop{display:grid;grid-template-columns:200px 1fr 66px;align-items:center;gap:16px}
+.cyd{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cybar{display:flex;height:11px;background:rgba(22,19,15,.06);border-radius:2px;overflow:hidden}
 .cyc{font-weight:700;font-size:13px;text-align:right}
 .cyfig{display:flex;justify-content:space-between;flex-wrap:wrap;gap:2px 16px;font-size:11.5px}
@@ -479,8 +480,8 @@ h1{font-weight:800;font-size:clamp(44px,9vw,82px);line-height:.9;letter-spacing:
       `<div class=avg>Annualized average &middot; <b>Pages</b> mean ${num(Math.round(d.avg.pages.mean))} / median ${num(Math.round(d.avg.pages.median))} &nbsp;&middot;&nbsp; <b>Cost</b> mean ${$(d.avg.cost.mean)} / median ${$(d.avg.cost.median)}</div>` +
       `<div class=cmyk><i style="background:#0098d4"></i><i style="background:#e5007e"></i><i style="background:#f5b500"></i><i style="background:#16130f"></i></div>` +
       `<div class=tools><button data-a=copy>Copy report</button><button data-a=json>Download JSON</button><button data-a=csv>Download CSV</button></div>` +
-      `<h2 class=sec>Annual summary <span class=legend><i style="background:#0098d4"></i>base<i style="background:#d35400"></i>overage</span></h2><div class=ann>${annualRows}</div>` +
-      `<h2 class=sec>Billing cycles <span class=legend><i style="background:#0098d4"></i>base<i style="background:#d35400"></i>overage</span></h2><div class=cycles>${cycleBlocks}</div>` +
+      `<h2 class=sec>Annual summary <span class=legend><i style="background:#0098d4"></i>base<i class=swo></i>overage</span></h2><div class=ann>${annualRows}</div>` +
+      `<h2 class=sec>Billing cycles <span class=legend><i style="background:#0098d4"></i>base<i class=swo></i>overage</span></h2><div class=cycles>${cycleBlocks}</div>` +
       `<div class=foot>Each year = billing cycles ending in it &middot; costs are HP's own per-cycle charges &middot; the plain-text version is on &ldquo;Copy report&rdquo;.</div>` +
       `</div></div></div>`;
 
